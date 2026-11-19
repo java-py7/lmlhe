@@ -176,7 +176,7 @@ function mapAdvisorRecommendation(raw: any): AdvisorRecommendationItem {
 export function AdvisorPage() {
   const navigate = useNavigate();
   const { showSuccess, showError, showInfo } = useToast();
-  const { refreshModels } = useEngine();
+  const { refreshModels, hardware, isHosted, localAgent } = useEngine();
 
   // Filters & Parameters
   const [workload, setWorkload] = useState('general');
@@ -407,38 +407,62 @@ export function AdvisorPage() {
           <CardHeader className="pb-3">
             <CardTitle className="text-xs font-medium text-muted-foreground flex items-center justify-between">
               <span>Hardware Capacity Summary</span>
-              <Badge variant="outline" className="text-[10px] uppercase">
-                {hwSummary?.os || 'Detected'}
+              <Badge
+                variant={isHosted && localAgent.status !== 'connected' ? 'destructive' : 'outline'}
+                className="text-[10px] uppercase"
+              >
+                {isHosted && localAgent.status !== 'connected'
+                  ? 'LOCAL AGENT OFFLINE'
+                  : hardware?.os?.system || hwSummary?.os || 'Detected'}
               </Badge>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2.5 text-xs">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Available System RAM</span>
-              <span className="font-semibold text-foreground">
-                {hwSummary?.ram?.available_formatted || '—'} free ({hwSummary?.ram?.used_percent !== undefined ? `${hwSummary.ram.used_percent}%` : '—'} used)
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Compute Topologies</span>
-              <span className="font-semibold text-foreground">
-                {hwSummary?.cpu?.physical_cores ? `${hwSummary.cpu.physical_cores} Physical Cores` : '—'} ({hwSummary?.cpu?.logical_threads ? `${hwSummary.cpu.logical_threads} Threads` : '—'})
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">GPU Hardware Acceleration</span>
-              <span className="font-semibold text-foreground">
-                {hwSummary?.gpu?.detected
-                  ? (hwSummary.gpu.dedicated_vram_formatted || hwSummary.gpu.name || 'Detected')
-                  : 'CPU-Only (Thread Pooling)'}
-              </span>
-            </div>
-            <div className="pt-2 border-t border-border flex justify-between items-center text-[11px]">
-              <span className="text-muted-foreground">Active Runtime:</span>
-              <Badge variant="success" className="text-[10px] font-mono">
-                {hwSummary?.active_runtime || 'llama.cpp'}
-              </Badge>
-            </div>
+            {isHosted && localAgent.status !== 'connected' ? (
+              <div className="py-2 text-center text-xs text-muted-foreground space-y-1">
+                <p className="font-medium text-foreground">Local PC Not Connected</p>
+                <p className="text-[11px]">
+                  Run <code className="text-primary font-mono">start_local_agent.bat</code> to evaluate models on your actual hardware.
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Available System RAM</span>
+                  <span className="font-semibold text-foreground">
+                    {hardware?.ram?.available_gb !== undefined
+                      ? `${hardware.ram.available_gb.toFixed(1)} GB free`
+                      : hwSummary?.ram?.available_formatted || '—'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Compute Topologies</span>
+                  <span className="font-semibold text-foreground">
+                    {hardware?.cpu?.physical_cores
+                      ? `${hardware.cpu.physical_cores}C / ${hardware.cpu.logical_threads}T`
+                      : hwSummary?.cpu?.physical_cores
+                      ? `${hwSummary.cpu.physical_cores} Cores`
+                      : '—'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">GPU Acceleration</span>
+                  <span className="font-semibold text-foreground">
+                    {hardware?.gpu?.detected
+                      ? hardware.gpu.dedicated_vram_formatted || hardware.gpu.name || 'Detected'
+                      : hwSummary?.gpu?.detected
+                      ? hwSummary.gpu.dedicated_vram_formatted || hwSummary.gpu.name
+                      : 'CPU-Only (Thread Pooling)'}
+                  </span>
+                </div>
+                <div className="pt-2 border-t border-border flex justify-between items-center text-[11px]">
+                  <span className="text-muted-foreground">Inference Target:</span>
+                  <Badge variant="success" className="text-[10px] font-mono">
+                    {hardware ? 'LOCAL HARDWARE' : hwSummary?.active_runtime || 'llama.cpp'}
+                  </Badge>
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>

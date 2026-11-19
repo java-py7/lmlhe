@@ -1,3 +1,40 @@
+export interface LocalAgentQuickSpec {
+  cpu: string;
+  cores: number;
+  threads: number;
+  ram_total_gb: number;
+  ram_free_gb: number;
+  gpu: string;
+  vram: string;
+}
+
+export interface LocalAgentStatusResponse {
+  status: string;
+  service: string;
+  connected: boolean;
+  role: string;
+  version: string;
+  timestamp: number;
+  machine: {
+    hostname: string;
+    os: string;
+    architecture: string;
+    python_version: string;
+  };
+  quick_spec: LocalAgentQuickSpec;
+}
+
+export interface LocalAgentState {
+  status: 'checking' | 'connected' | 'disconnected';
+  url: string;
+  data: LocalAgentStatusResponse | null;
+  error?: string;
+  hardware: HardwareProfile | null;
+  models: ModelEntry[];
+  runtimes: RuntimeStatusResponse | null;
+  metrics: LiveMetrics | null;
+}
+
 export interface DeploymentInfo {
   is_hosted: boolean;
   environment: 'production' | 'development';

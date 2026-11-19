@@ -216,6 +216,34 @@ app = FastAPI(
     version="1.0.0",
 )
 
+from starlette.middleware.base import BaseHTTPMiddleware
+
+# Chrome/Edge Private Network Access (PNA) Middleware
+class PrivateNetworkAccessMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        origin = request.headers.get("origin", "*")
+        is_pna = request.headers.get("access-control-request-private-network") == "true"
+
+        if request.method == "OPTIONS":
+            response = Response(status_code=200)
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, HEAD"
+            response.headers["Access-Control-Allow-Headers"] = request.headers.get(
+                "access-control-request-headers", "Content-Type, Authorization, X-API-Key, X-Requested-With"
+            )
+            if is_pna:
+                response.headers["Access-Control-Allow-Private-Network"] = "true"
+            return response
+
+        response = await call_next(request)
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        if is_pna or "access-control-request-private-network" in request.headers:
+            response.headers["Access-Control-Allow-Private-Network"] = "true"
+        return response
+
+app.add_middleware(PrivateNetworkAccessMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -223,6 +251,38 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.get("/api/v1/agent/status")
+def get_agent_status():
+    is_hosted = is_hosted_environment()
+    hw = HardwareDetector.get_cpu_info()
+    ram = HardwareDetector.get_ram_info()
+    gpu = HardwareDetector.get_gpu_info()
+    return {
+        "status": "ok",
+        "service": "lmlhe-engine",
+        "connected": True,
+        "role": "hosted_server" if is_hosted else "local_hardware_agent",
+        "is_hosted": is_hosted,
+        "version": "2.0.0",
+        "timestamp": time.time(),
+        "machine": {
+            "hostname": platform.node(),
+            "os": f"{platform.system()} {platform.release()}",
+            "architecture": platform.machine(),
+            "python_version": platform.python_version(),
+        },
+        "quick_spec": {
+            "cpu": hw.get("name", "Processor"),
+            "cores": hw.get("physical_cores", 1),
+            "threads": hw.get("logical_threads", 1),
+            "ram_total_gb": ram.get("total_gb", 0),
+            "ram_free_gb": ram.get("available_gb", 0),
+            "gpu": gpu.get("name") if gpu.get("detected") else "CPU-Only",
+            "vram": gpu.get("dedicated_vram_formatted", "0 B"),
+        },
+    }
 
 
 @app.on_event("startup")

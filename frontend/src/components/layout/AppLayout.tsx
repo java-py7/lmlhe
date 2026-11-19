@@ -19,11 +19,14 @@ import {
   Server,
   Cloud,
   Laptop,
+  AlertCircle,
+  RefreshCw,
 } from 'lucide-react';
 import { useTheme } from '@/lib/theme';
 import { useEngine } from '@/lib/context';
 import { Sheet } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
+import { LocalAgentBanner } from '@/components/layout/LocalAgentBanner';
 import { cn } from '@/lib/utils';
 
 const navItems = [
@@ -42,7 +45,18 @@ const navItems = [
 export function AppLayout({ children }: { children?: React.ReactNode } = {}) {
   const location = useLocation();
   const { theme, toggleTheme } = useTheme();
-  const { activeRuntime, activeModel, runtimes, hardware, metrics } = useEngine();
+  const {
+    activeRuntime,
+    activeModel,
+    runtimes,
+    hardware,
+    metrics,
+    isHosted,
+    isOriginLocal,
+    localAgent,
+    checkLocalAgent,
+    serverDeployment,
+  } = useEngine();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -52,8 +66,7 @@ export function AppLayout({ children }: { children?: React.ReactNode } = {}) {
     ? Boolean(runtimes?.ollama?.detected)
     : Boolean(runtimes?.llama_cpp?.status?.healthy);
 
-  const deployment = hardware?.deployment;
-  const isHosted = Boolean(deployment?.is_hosted);
+  const deployment = hardware?.deployment || serverDeployment;
 
   const currentNav = navItems.find((item) =>
     item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path)
@@ -210,6 +223,52 @@ export function AppLayout({ children }: { children?: React.ReactNode } = {}) {
               </span>
             </div>
 
+            {/* Local Agent Status Pill (in Hosted Mode) */}
+            {isHosted ? (
+              localAgent.status === 'connected' ? (
+                <button
+                  type="button"
+                  onClick={() => checkLocalAgent()}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-400 hover:bg-emerald-500/20 transition-colors"
+                  title={`Local PC Agent Connected at ${localAgent.url}. Click to re-sync.`}
+                >
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                  </span>
+                  <span className="font-mono text-[11px] font-medium hidden sm:inline">
+                    {localAgent.data?.machine?.hostname || 'Local PC'}
+                  </span>
+                  <Badge variant="success" className="text-[9px] px-1 py-0 h-3.5">
+                    PC ON
+                  </Badge>
+                </button>
+              ) : localAgent.status === 'checking' ? (
+                <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-400">
+                  <RefreshCw className="w-3 h-3 animate-spin" />
+                  <span className="hidden sm:inline">Probing PC...</span>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => checkLocalAgent()}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-rose-500/10 border border-rose-500/30 text-xs text-rose-400 hover:bg-rose-500/20 transition-colors"
+                  title="Local PC Agent Disconnected. Click to probe localhost:8008 or localhost:8000."
+                >
+                  <span className="w-2 h-2 rounded-full bg-rose-500" />
+                  <span className="font-mono text-[11px] hidden sm:inline">Local PC Agent</span>
+                  <Badge variant="destructive" className="text-[9px] px-1 py-0 h-3.5">
+                    OFFLINE
+                  </Badge>
+                </button>
+              )
+            ) : (
+              <div className="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-[11px] text-emerald-400">
+                <Laptop className="w-3.5 h-3.5" />
+                <span className="font-mono">Local Workstation</span>
+              </div>
+            )}
+
             {/* Runtime Status Badge */}
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-muted/40 border border-border text-xs">
               <span
@@ -245,7 +304,8 @@ export function AppLayout({ children }: { children?: React.ReactNode } = {}) {
         </header>
 
         {/* Page Content Viewport */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-background/50">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-background/50 space-y-5">
+          <LocalAgentBanner />
           {children || <Outlet />}
         </main>
       </div>

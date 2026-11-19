@@ -41,17 +41,32 @@ export function DashboardPage() {
     metrics,
     refreshRuntimes,
     refreshModels,
+    isHosted,
+    localAgent,
   } = useEngine();
 
   const [isStarting, setIsStarting] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
 
+  // Whether we have verified local hardware (via local agent or running locally)
+  const hasHardware = Boolean(hardware);
+
   // CPU / RAM values from live metrics or hardware fallback
-  const cpuPercent = Math.round(metrics?.cpu?.utilization_percent ?? hardware?.cpu?.utilization_percent ?? 0);
-  const ramPercent = Math.round(metrics?.ram?.utilization_percent ?? hardware?.ram?.utilization_percent ?? 0);
-  const ramUsedGb = metrics?.ram?.used_gb ?? hardware?.ram?.used_gb ?? 0;
-  const ramTotalGb = metrics?.ram?.total_gb ?? hardware?.ram?.total_gb ?? 16;
-  const ramFreeGb = metrics?.ram?.available_gb ?? hardware?.ram?.available_gb ?? 0;
+  const cpuPercent = hasHardware
+    ? Math.round(metrics?.cpu?.utilization_percent ?? hardware?.cpu?.utilization_percent ?? 0)
+    : 0;
+  const ramPercent = hasHardware
+    ? Math.round(metrics?.ram?.utilization_percent ?? hardware?.ram?.utilization_percent ?? 0)
+    : 0;
+  const ramUsedGb = hasHardware
+    ? (metrics?.ram?.used_gb ?? hardware?.ram?.used_gb ?? 0)
+    : 0;
+  const ramTotalGb = hasHardware
+    ? (metrics?.ram?.total_gb ?? hardware?.ram?.total_gb ?? 0)
+    : 0;
+  const ramFreeGb = hasHardware
+    ? (metrics?.ram?.available_gb ?? hardware?.ram?.available_gb ?? 0)
+    : 0;
 
   const gpu = hardware?.gpu;
   const infer = metrics?.inference;
@@ -121,14 +136,18 @@ export function DashboardPage() {
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-xs font-medium text-muted-foreground">CPU Utilization</CardTitle>
             <Badge variant="outline" className="font-mono text-[10px]">
-              {hardware?.cpu?.physical_cores ? `${hardware.cpu.physical_cores}C / ${hardware.cpu.logical_threads}T` : 'CPU'}
+              {hasHardware && hardware?.cpu?.physical_cores
+                ? `${hardware.cpu.physical_cores}C / ${hardware.cpu.logical_threads}T`
+                : isHosted ? 'LOCAL OFFLINE' : 'CPU'}
             </Badge>
           </CardHeader>
           <CardContent className="space-y-2">
             <div className="flex items-baseline justify-between">
-              <span className="text-2xl font-bold tracking-tight">{cpuPercent}%</span>
+              <span className="text-2xl font-bold tracking-tight">
+                {hasHardware ? `${cpuPercent}%` : '—'}
+              </span>
               <span className="text-xs text-muted-foreground truncate max-w-[120px]" title={hardware?.cpu?.name}>
-                {hardware?.cpu?.name?.split(' ')[0] || 'Processor'}
+                {hasHardware ? hardware?.cpu?.name?.split(' ')[0] || 'Processor' : 'Local Agent Offline'}
               </span>
             </div>
             <Progress value={cpuPercent} indicatorColor={cpuPercent > 85 ? 'bg-rose-500' : 'bg-primary'} />
@@ -148,14 +167,18 @@ export function DashboardPage() {
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-xs font-medium text-muted-foreground">Memory Allocation</CardTitle>
             <Badge variant="outline" className="font-mono text-[10px]">
-              {ramPercent}%
+              {hasHardware ? `${ramPercent}%` : isHosted ? 'LOCAL OFFLINE' : 'RAM'}
             </Badge>
           </CardHeader>
           <CardContent className="space-y-2">
             <div className="flex items-baseline justify-between">
-              <span className="text-2xl font-bold tracking-tight">{ramUsedGb.toFixed(1)} GB</span>
+              <span className="text-2xl font-bold tracking-tight">
+                {hasHardware ? `${ramUsedGb.toFixed(1)} GB` : '—'}
+              </span>
               <span className="text-xs text-muted-foreground">
-                {ramFreeGb.toFixed(1)} GB free of {ramTotalGb.toFixed(0)} GB
+                {hasHardware
+                  ? `${ramFreeGb.toFixed(1)} GB free of ${ramTotalGb.toFixed(0)} GB`
+                  : 'Local RAM not connected'}
               </span>
             </div>
             <Progress value={ramPercent} indicatorColor={ramPercent > 85 ? 'bg-rose-500' : 'bg-indigo-500'} />
@@ -175,23 +198,23 @@ export function DashboardPage() {
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-xs font-medium text-muted-foreground">GPU & VRAM</CardTitle>
             <Badge variant={gpu?.detected ? 'success' : 'outline'} className="text-[10px]">
-              {gpu?.detected ? gpu.vendor || 'DETECTED' : 'CPU-ONLY'}
+              {hasHardware ? (gpu?.detected ? gpu.vendor || 'DETECTED' : 'CPU-ONLY') : isHosted ? 'LOCAL OFFLINE' : 'OFFLINE'}
             </Badge>
           </CardHeader>
           <CardContent className="space-y-2">
             <div className="flex items-baseline justify-between">
               <span className="text-2xl font-bold tracking-tight">
-                {gpu?.detected ? gpu.dedicated_vram_formatted || 'Detected' : 'Unavailable'}
+                {hasHardware ? (gpu?.detected ? gpu.dedicated_vram_formatted || 'Detected' : 'CPU GEMM') : '—'}
               </span>
               <span className="text-xs text-muted-foreground truncate max-w-[120px]" title={gpu?.name || 'CPU GEMM'}>
-                {gpu?.detected ? gpu.name : 'Integrated'}
+                {hasHardware ? (gpu?.detected ? gpu.name : 'Integrated / None') : 'Local GPU Offline'}
               </span>
             </div>
             <div className="text-[11px] text-muted-foreground pt-1 truncate">
-              Shared pool: {gpu?.shared_vram_formatted || 'Standard RAM pool'}
+              Shared pool: {hasHardware ? gpu?.shared_vram_formatted || 'Standard RAM pool' : '—'}
             </div>
             <div className="text-[11px] text-muted-foreground">
-              Offload Mode: <span className="font-medium text-foreground">{gpu?.detected ? 'GPU Acceleration' : 'CPU Thread Pooling'}</span>
+              Offload Mode: <span className="font-medium text-foreground">{hasHardware ? (gpu?.detected ? 'GPU Acceleration' : 'CPU Thread Pooling') : 'Pending Connection'}</span>
             </div>
           </CardContent>
         </Card>
@@ -365,20 +388,28 @@ export function DashboardPage() {
             <CardContent className="space-y-4">
               {/* Drive list */}
               <div className="space-y-3">
-                {(hardware?.storage || []).map((d) => (
-                  <div key={d.mountpoint} className="space-y-1.5">
-                    <div className="flex justify-between text-xs font-medium">
-                      <span>{d.mountpoint} ({d.fstype || 'Drive'})</span>
-                      <span className="text-muted-foreground font-mono">
-                        {d.free_gb.toFixed(1)} GB free / {d.total_gb.toFixed(0)} GB ({d.percent_used}% used)
-                      </span>
+                {(hardware?.storage || []).length > 0 ? (
+                  (hardware?.storage || []).map((d) => (
+                    <div key={d.mountpoint} className="space-y-1.5">
+                      <div className="flex justify-between text-xs font-medium">
+                        <span>{d.mountpoint} ({d.fstype || 'Drive'})</span>
+                        <span className="text-muted-foreground font-mono">
+                          {(d.free_gb ?? 0).toFixed(1)} GB free / {(d.total_gb ?? 0).toFixed(0)} GB ({d.percent_used ?? 0}% used)
+                        </span>
+                      </div>
+                      <Progress
+                        value={d.percent_used ?? 0}
+                        indicatorColor={(d.percent_used ?? 0) > 85 ? 'bg-rose-500' : 'bg-primary'}
+                      />
                     </div>
-                    <Progress
-                      value={d.percent_used}
-                      indicatorColor={d.percent_used > 85 ? 'bg-rose-500' : 'bg-primary'}
-                    />
+                  ))
+                ) : (
+                  <div className="p-3 rounded-lg border border-dashed border-border bg-muted/20 text-center text-xs text-muted-foreground">
+                    {isHosted
+                      ? 'Local drives not detected. Launch start_local_agent.bat on your PC to view C:\\ and D:\\ drives.'
+                      : 'No storage volumes detected.'}
                   </div>
-                ))}
+                )}
               </div>
 
               {/* Memory Safety Margin Box */}
@@ -388,12 +419,14 @@ export function DashboardPage() {
                     <ShieldCheck className="w-4 h-4 text-emerald-500" />
                     Memory Safety Margin
                   </span>
-                  <Badge variant="success" className="text-[10px]">
-                    OPTIMIZED
+                  <Badge variant={hasHardware ? 'success' : 'outline'} className="text-[10px]">
+                    {hasHardware ? 'OPTIMIZED' : 'OFFLINE'}
                   </Badge>
                 </div>
                 <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  Available physical RAM ({ramFreeGb.toFixed(1)} GB) provides stable operating headroom. Weights paging via mmap is activated to prevent out-of-memory faults during long context generation.
+                  {hasHardware
+                    ? `Available physical RAM (${ramFreeGb.toFixed(1)} GB of ${ramTotalGb.toFixed(0)} GB) provides stable operating headroom. Weights paging via mmap is activated to prevent out-of-memory faults during long context generation.`
+                    : 'Connect the local hardware agent to calculate accurate working memory safety margins for your physical workstation.'}
                 </p>
               </div>
             </CardContent>
