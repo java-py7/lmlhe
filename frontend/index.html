@@ -1,0 +1,1517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Large-Model-on-Light-Hardware Engine</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <div class="header-container">
+      <div class="brand">
+        <div class="logo-badge">LM-LH</div>
+        <div>
+          <div class="brand-title">Large-Model-on-Light-Hardware Engine</div>
+          <div class="brand-subtitle">Local AI Inference Runtime & Hardware Intelligence</div>
+        </div>
+      </div>
+      <div class="header-status-group">
+        <div class="status-pill" id="header-runtime-pill">
+          <span class="status-dot offline" id="runtime-status-dot"></span>
+          <span id="header-runtime-name">Runtime: Detecting...</span>
+        </div>
+        <div class="status-pill">
+          <span style="color: var(--muted-foreground)">Model:</span>
+          <strong id="header-model-name" style="font-weight:600">Loading...</strong>
+        </div>
+        <div class="status-pill" id="header-quick-stats">
+          <span style="color: var(--muted-foreground)">CPU:</span> <span id="quick-cpu">-%</span>
+          <span style="color: var(--border); margin: 0 2px;">|</span>
+          <span style="color: var(--muted-foreground)">RAM:</span> <span id="quick-ram">-%</span>
+        </div>
+        <button class="btn btn-secondary btn-sm" id="btn-quick-diag">Diagnostics</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="main-layout">
+    <nav class="nav-tabs" role="tablist">
+      <button class="tab-btn active" data-tab="tab-dashboard">Dashboard</button>
+      <button class="tab-btn" data-tab="tab-advisor">AI Model Advisor</button>
+      <button class="tab-btn" data-tab="tab-hardware">Hardware & Engine</button>
+      <button class="tab-btn" data-tab="tab-runtimes">Runtimes & Models</button>
+      <button class="tab-btn" data-tab="tab-chat">Inference Studio</button>
+      <button class="tab-btn" data-tab="tab-monitor">Live Monitor</button>
+      <button class="tab-btn" data-tab="tab-benchmark">Benchmark Matrix</button>
+      <button class="tab-btn" data-tab="tab-diagnostics">Diagnostics</button>
+      <button class="tab-btn" data-tab="tab-settings">Project 3 API & Config</button>
+      <button class="tab-btn" data-tab="tab-packaging">Deployment & Packaging</button>
+    </nav>
+
+    <!-- TAB 1: DASHBOARD -->
+    <section class="tab-content active" id="tab-dashboard">
+      <div class="grid-4">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">CPU Utilization</span>
+            <span class="badge primary" id="dash-cpu-cores">- C / - T</span>
+          </div>
+          <div class="card-value" id="dash-cpu-percent">0%</div>
+          <div class="progress-bar-container">
+            <div class="progress-bar-fill" id="dash-cpu-bar" style="width: 0%"></div>
+          </div>
+          <div class="card-subtext" id="dash-cpu-name">Detecting processor...</div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Memory Allocation</span>
+            <span class="badge warning" id="dash-ram-percent">0%</span>
+          </div>
+          <div class="card-value" id="dash-ram-used">0.0 GB</div>
+          <div class="progress-bar-container">
+            <div class="progress-bar-fill warning" id="dash-ram-bar" style="width: 0%"></div>
+          </div>
+          <div class="card-subtext" id="dash-ram-sub">0.0 GB free of 0.0 GB</div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">GPU & VRAM</span>
+            <span class="badge" id="dash-gpu-status-badge">Detecting</span>
+          </div>
+          <div class="card-value" id="dash-gpu-vram">Unavailable</div>
+          <div class="card-subtext" id="dash-gpu-name">Detecting graphics hardware...</div>
+          <div class="card-subtext" id="dash-gpu-vram-sub" style="margin-top:0.2rem; font-size:0.75rem;">Shared: -</div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Inference Telemetry</span>
+            <span class="badge" id="dash-infer-state-badge">IDLE</span>
+          </div>
+          <div class="card-value" id="dash-infer-toks">0.0 t/s</div>
+          <div class="card-subtext" id="dash-infer-ttft">TTFT: -- ms</div>
+          <div class="card-subtext" id="dash-infer-total" style="margin-top:0.2rem; font-size:0.75rem;">Last Gen: 0 tokens (0.0s)</div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Active Inference Runtime Profile</div>
+              <div class="card-desc">Current execution engine and model parameters</div>
+            </div>
+            <span class="badge success" id="dash-runtime-tag">Ready</span>
+          </div>
+
+          <div class="spec-list">
+            <div class="spec-item">
+              <span class="spec-label">Selected Model</span>
+              <span class="spec-val" id="dash-spec-model">-</span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-label">Model Format & Size</span>
+              <span class="spec-val" id="dash-spec-size">-</span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-label">Active Runtime</span>
+              <span class="spec-val" id="dash-spec-runtime">-</span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-label">CPU Threads Allocated</span>
+              <span class="spec-val" id="dash-spec-threads">-</span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-label">GPU Layer Offload (-ngl)</span>
+              <span class="spec-val" id="dash-spec-ngl">-</span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-label">Context Window Size</span>
+              <span class="spec-val" id="dash-spec-ctx">-</span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-label">Memory Mapping (mmap)</span>
+              <span class="spec-val" id="dash-spec-mmap">-</span>
+            </div>
+          </div>
+
+          <div style="display:flex; gap:0.5rem; margin-top:1.2rem; flex-wrap:wrap;">
+            <button class="btn btn-primary btn-sm" id="btn-dash-start-server">Start llama.cpp Server</button>
+            <button class="btn btn-secondary btn-sm" id="btn-dash-stop-server">Stop Server</button>
+            <button class="btn btn-outline btn-sm" id="btn-dash-open-chat">Open Chat Studio</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Storage Environment & Memory Safety</div>
+              <div class="card-desc">Drive free space and model allocation safety margin</div>
+            </div>
+            <span class="badge outline" id="dash-storage-badge">Checked</span>
+          </div>
+
+          <div id="dash-storage-drives-list" style="display:flex; flex-direction:column; gap:0.75rem; margin-bottom:1.2rem;">
+            <!-- Rendered dynamically -->
+          </div>
+
+          <div class="separator"></div>
+
+          <div style="display:flex; align-items:center; justify-content:space-between;">
+            <div>
+              <div style="font-weight:600; font-size:0.85rem;">Memory Safety Margin</div>
+              <div style="font-size:0.75rem; color:var(--muted-foreground);" id="dash-safety-desc">Checking headroom...</div>
+            </div>
+            <span class="badge success" id="dash-safety-tier-badge">SAFE</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB: AI MODEL ADVISOR & AUTO SETUP -->
+    <section class="tab-content" id="tab-advisor">
+      <!-- Section Header -->
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:1.25rem; flex-wrap:wrap; gap:0.75rem;">
+        <div>
+          <h2 style="font-size:1.25rem; font-weight:700; margin-bottom:0.25rem; display:flex; align-items:center; gap:0.5rem;">
+            <span>🤖 AI Model Advisor & Auto Setup</span>
+            <span class="badge primary" style="font-size:0.7rem; font-weight:600;">Hardware Calibrated</span>
+          </h2>
+          <p style="color:var(--muted-foreground); font-size:0.825rem; margin:0; max-width:850px;">
+            Intelligent model discovery and deployment engine. Analyzes physical CPU cores, available RAM headroom, dedicated VRAM, and memory bandwidth to recommend, calibrate, and install the optimal model for your exact machine.
+          </p>
+        </div>
+        <div style="display:flex; gap:0.5rem;">
+          <button class="btn btn-secondary btn-sm" id="btn-advisor-recheck-hw">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+            Re-evaluate Hardware
+          </button>
+          <button class="btn btn-outline btn-sm" id="btn-open-compare-modal" disabled>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M12 3v18"/></svg>
+            Compare Models (<span id="compare-count">0</span>)
+          </button>
+        </div>
+      </div>
+
+      <!-- Hardware Envelope Summary Card -->
+      <div class="card" style="margin-bottom:1.25rem; border-left: 4px solid var(--primary);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+          <strong style="font-size:0.85rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted-foreground);">
+            Host Hardware Execution Envelope
+          </strong>
+          <span class="badge success" id="advisor-active-runtime-badge">Runtime: Active</span>
+        </div>
+        <div class="grid-4" style="gap:1rem;">
+          <div style="background:var(--secondary); padding:0.75rem; border-radius:var(--radius); border:1px solid var(--border);">
+            <div style="font-size:0.75rem; color:var(--muted-foreground);">Available RAM Headroom</div>
+            <div style="font-size:1.15rem; font-weight:700; color:var(--foreground);" id="env-ram-val">- GB free</div>
+            <div style="font-size:0.7rem; color:var(--muted-foreground);" id="env-ram-sub">of - GB total</div>
+          </div>
+          <div style="background:var(--secondary); padding:0.75rem; border-radius:var(--radius); border:1px solid var(--border);">
+            <div style="font-size:0.75rem; color:var(--muted-foreground);">CPU Compute Cores</div>
+            <div style="font-size:1.15rem; font-weight:700; color:var(--foreground);" id="env-cpu-val">- Cores</div>
+            <div style="font-size:0.7rem; color:var(--muted-foreground);" id="env-cpu-sub">- Threads</div>
+          </div>
+          <div style="background:var(--secondary); padding:0.75rem; border-radius:var(--radius); border:1px solid var(--border);">
+            <div style="font-size:0.75rem; color:var(--muted-foreground);">GPU & VRAM Capacity</div>
+            <div style="font-size:1.15rem; font-weight:700; color:var(--foreground);" id="env-gpu-val">- VRAM</div>
+            <div style="font-size:0.7rem; color:var(--muted-foreground);" id="env-gpu-sub">Discrete GPU</div>
+          </div>
+          <div style="background:var(--secondary); padding:0.75rem; border-radius:var(--radius); border:1px solid var(--border);">
+            <div style="font-size:0.75rem; color:var(--muted-foreground);">Max Safe Model Footprint</div>
+            <div style="font-size:1.15rem; font-weight:700; color:var(--primary);" id="env-safe-val">- GB</div>
+            <div style="font-size:0.7rem; color:var(--muted-foreground);">75% RAM safety threshold</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Workload & Optimization Selector -->
+      <div class="card" style="margin-bottom:1.25rem;">
+        <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:1rem; margin-bottom:1rem;">
+          <div>
+            <strong style="font-size:0.9rem;">1. Select Your Intended Workload</strong>
+            <div style="font-size:0.75rem; color:var(--muted-foreground);">What do you primarily want to achieve with the local AI model?</div>
+          </div>
+          <div style="display:flex; align-items:center; gap:0.5rem;">
+            <label style="font-size:0.8rem; color:var(--muted-foreground);">Preference:</label>
+            <select class="select" id="advisor-preference-select" style="width:230px; font-size:0.8rem; padding:0.35rem 0.6rem;">
+              <option value="balanced" selected>Balanced (Quality & Speed)</option>
+              <option value="lowest_memory">Lowest Memory Usage</option>
+              <option value="best_quality">Best Available Quality</option>
+              <option value="fastest_inference">Fastest Token Generation</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Workload Pills -->
+        <div class="workload-pills-row" id="workload-pills">
+          <button class="workload-btn active" data-workload="general">
+            <span class="workload-icon">💬</span>
+            <span class="workload-title">General Assistant</span>
+            <span class="workload-desc">Everyday chat & tasks</span>
+          </button>
+          <button class="workload-btn" data-workload="coding">
+            <span class="workload-icon">💻</span>
+            <span class="workload-title">Coding & Syntax</span>
+            <span class="workload-desc">Code gen & refactoring</span>
+          </button>
+          <button class="workload-btn" data-workload="reasoning">
+            <span class="workload-icon">🧠</span>
+            <span class="workload-title">Reasoning & Math</span>
+            <span class="workload-desc">Logic & chain-of-thought</span>
+          </button>
+          <button class="workload-btn" data-workload="summarization">
+            <span class="workload-icon">📝</span>
+            <span class="workload-title">Summarization</span>
+            <span class="workload-desc">Briefings & synthesis</span>
+          </button>
+          <button class="workload-btn" data-workload="document">
+            <span class="workload-icon">📄</span>
+            <span class="workload-title">Document Extraction</span>
+            <span class="workload-desc">Structured parsing & Q&A</span>
+          </button>
+          <button class="workload-btn" data-workload="all">
+            <span class="workload-icon">🌐</span>
+            <span class="workload-title">All Models</span>
+            <span class="workload-desc">Browse complete catalog</span>
+          </button>
+        </div>
+
+        <div class="separator" style="margin:1rem 0;"></div>
+
+        <!-- Search & Discovery Source Filter -->
+        <div style="display:flex; flex-wrap:wrap; gap:0.75rem; align-items:center;">
+          <div style="flex:1; min-width:240px; position:relative;">
+            <input type="text" class="input" id="advisor-search-input" placeholder="Search models by name, architecture (e.g. Qwen, Llama, DeepSeek)..." style="font-size:0.825rem;">
+          </div>
+          <div style="display:flex; gap:0.5rem;">
+            <select class="select" id="advisor-source-select" style="font-size:0.8rem; padding:0.35rem 0.6rem;">
+              <option value="all">All Sources (HF + Ollama)</option>
+              <option value="huggingface">Hugging Face Hub</option>
+              <option value="ollama">Ollama Library</option>
+            </select>
+            <button class="btn btn-primary btn-sm" id="btn-advisor-search">Search Hub</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5-Tier Filter Tabs -->
+      <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; margin-bottom:1rem; gap:0.5rem;">
+        <div class="tier-filter-group" id="tier-filter-buttons">
+          <button class="tier-filter-btn active" data-tier="ALL">
+            All Models <span class="tier-count" id="count-all">0</span>
+          </button>
+          <button class="tier-filter-btn tier-rec" data-tier="RECOMMENDED">
+            Recommended <span class="tier-count" id="count-rec">0</span>
+          </button>
+          <button class="tier-filter-btn tier-alt" data-tier="GOOD_ALTERNATIVE">
+            Good Alternative <span class="tier-count" id="count-alt">0</span>
+          </button>
+          <button class="tier-filter-btn tier-exp" data-tier="EXPERIMENTAL">
+            Experimental <span class="tier-count" id="count-exp">0</span>
+          </button>
+          <button class="tier-filter-btn tier-not" data-tier="NOT_RECOMMENDED">
+            Not Recommended <span class="tier-count" id="count-not">0</span>
+          </button>
+          <button class="tier-filter-btn tier-unsup" data-tier="UNSUPPORTED">
+            Unsupported <span class="tier-count" id="count-unsup">0</span>
+          </button>
+        </div>
+        <div style="font-size:0.75rem; color:var(--muted-foreground);" id="advisor-results-meta">
+          Showing evaluated models
+        </div>
+      </div>
+
+      <!-- Models Cards Container -->
+      <div class="advisor-cards-grid" id="advisor-cards-container">
+        <!-- Rendered dynamically -->
+      </div>
+    </section>
+
+    <!-- TAB 2: HARDWARE & ENGINE -->
+    <section class="tab-content" id="tab-hardware">
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Hardware Detection & Limitations</div>
+              <div class="card-desc">Dynamic hardware limits discovered on this host</div>
+            </div>
+            <button class="btn btn-secondary btn-sm" id="btn-refresh-hw">Refresh Specs</button>
+          </div>
+
+          <div class="spec-list" id="full-hw-spec-list">
+            <!-- Populated dynamically via script -->
+          </div>
+
+          <div class="separator"></div>
+
+          <div class="alert alert-info">
+            <div>
+              <strong>Host Architecture & Limitation Analysis:</strong>
+              <div id="hw-bottleneck-analysis" style="margin-top:0.25rem;">Analyzing system hardware profile...</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Hardware-to-Runtime Configuration Engine</div>
+              <div class="card-desc">Mathematical memory estimation and execution recommendations</div>
+            </div>
+            <span class="badge primary">Adaptive</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Evaluate Model</label>
+            <select class="select" id="engine-eval-model-select"></select>
+          </div>
+
+          <div class="form-group">
+            <div style="display:flex; justify-content:space-between;">
+              <label class="form-label">Target Context Length</label>
+              <span style="font-size:0.8rem; font-family:var(--font-mono);" id="engine-ctx-val">2048</span>
+            </div>
+            <input type="range" min="512" max="8192" step="512" value="2048" class="input" id="engine-ctx-slider" style="padding:0; height:24px;">
+            <div class="form-hint">Larger context expands KV-cache linearly in working memory.</div>
+          </div>
+
+          <div style="background:var(--secondary); padding:0.85rem; border-radius:var(--radius-sm); border:1px solid var(--border); margin-bottom:1rem;">
+            <div style="font-size:0.8rem; font-weight:600; margin-bottom:0.5rem;">Estimated Working Memory Breakdown</div>
+            <div class="spec-list">
+              <div class="spec-item">
+                <span class="spec-label">Model Weights in RAM/VRAM</span>
+                <span class="spec-val" id="engine-mem-weights">-</span>
+              </div>
+              <div class="spec-item">
+                <span class="spec-label">KV Cache Footprint</span>
+                <span class="spec-val" id="engine-mem-kv">-</span>
+              </div>
+              <div class="spec-item">
+                <span class="spec-label">Activation Buffer Overhead</span>
+                <span class="spec-val" id="engine-mem-act">-</span>
+              </div>
+              <div class="spec-item" style="font-weight:600; border-top:1px solid var(--border); margin-top:0.25rem; padding-top:0.4rem;">
+                <span class="spec-label">Total Required Working Memory</span>
+                <span class="spec-val" id="engine-mem-total" style="color:var(--primary); font-size:0.9rem;">-</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="alert" id="engine-safety-alert">
+            <div id="engine-safety-text">-</div>
+          </div>
+
+          <div style="background:rgba(255,255,255,0.02); border:1px solid var(--border); padding:0.85rem; border-radius:var(--radius-sm); margin-bottom:1rem;">
+            <div style="font-size:0.8rem; font-weight:600; margin-bottom:0.5rem;">Recommended Execution Parameters</div>
+            <div class="grid-2" style="margin-bottom:0.5rem; gap:0.5rem;">
+              <div><span class="spec-label">CPU Threads:</span> <strong id="rec-threads">4</strong></div>
+              <div><span class="spec-label">GPU Layers:</span> <strong id="rec-ngl">0</strong></div>
+              <div><span class="spec-label">Batch Size:</span> <strong id="rec-batch">512</strong></div>
+              <div><span class="spec-label">mmap Mode:</span> <strong id="rec-mmap">Enabled</strong></div>
+            </div>
+            <div style="font-size:0.75rem; color:var(--muted-foreground);" id="rec-reasoning-text"></div>
+          </div>
+
+          <button class="btn btn-primary" id="btn-apply-recommendation" style="width:100%;">
+            Apply Recommended Configuration
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: RUNTIMES & MODELS -->
+    <section class="tab-content" id="tab-runtimes">
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Inference Runtime Management</div>
+              <div class="card-desc">Control local llama.cpp server and Ollama integrations</div>
+            </div>
+            <span class="badge" id="rt-active-badge">Active</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Active Engine Runtime</label>
+            <div style="display:flex; gap:1rem; margin-top:0.35rem;">
+              <label class="switch-label">
+                <input type="radio" name="runtime-select" value="llama.cpp server" id="rt-radio-llama">
+                <span>llama.cpp server mode</span>
+              </label>
+              <label class="switch-label">
+                <input type="radio" name="runtime-select" value="ollama" id="rt-radio-ollama">
+                <span>Ollama service</span>
+              </label>
+            </div>
+          </div>
+
+          <div id="llama-controls-card" style="background:var(--secondary); padding:1rem; border-radius:var(--radius-sm); border:1px solid var(--border); margin-bottom:1rem;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+              <strong style="font-size:0.85rem;">llama.cpp Server Status</strong>
+              <span class="badge" id="llama-status-badge">Stopped</span>
+            </div>
+
+            <div class="spec-list" style="margin-bottom:1rem;">
+              <div class="spec-item">
+                <span class="spec-label">Executable</span>
+                <span class="spec-val" id="llama-exe-val" style="font-size:0.72rem;">-</span>
+              </div>
+              <div class="spec-item">
+                <span class="spec-label">Process PID / Port</span>
+                <span class="spec-val" id="llama-pid-val">Not running</span>
+              </div>
+              <div class="spec-item">
+                <span class="spec-label">Process Memory RSS</span>
+                <span class="spec-val" id="llama-rss-val">0 B</span>
+              </div>
+            </div>
+
+            <div class="grid-2" style="gap:0.75rem; margin-bottom:0.75rem;">
+              <div>
+                <label class="form-label" style="font-size:0.75rem;">Threads (-t)</label>
+                <input type="number" id="llama-param-threads" class="input" value="4" min="1" max="64">
+              </div>
+              <div>
+                <label class="form-label" style="font-size:0.75rem;">GPU Layers (-ngl)</label>
+                <input type="number" id="llama-param-ngl" class="input" value="0" min="0" max="99">
+              </div>
+              <div>
+                <label class="form-label" style="font-size:0.75rem;">Context Size (-c)</label>
+                <input type="number" id="llama-param-ctx" class="input" value="2048" min="512" max="65536" step="512">
+              </div>
+              <div>
+                <label class="form-label" style="font-size:0.75rem;">Port</label>
+                <input type="number" id="llama-param-port" class="input" value="8080">
+              </div>
+            </div>
+
+            <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+              <button class="btn btn-primary btn-sm" id="btn-start-llama-proc">Launch Server Process</button>
+              <button class="btn btn-danger btn-sm" id="btn-stop-llama-proc">Terminate Server</button>
+              <button class="btn btn-outline btn-sm" id="btn-view-llama-logs">View Server Logs</button>
+            </div>
+          </div>
+
+          <div id="ollama-controls-card" style="background:var(--secondary); padding:1rem; border-radius:var(--radius-sm); border:1px solid var(--border);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+              <strong style="font-size:0.85rem;">Ollama Service Status</strong>
+              <span class="badge" id="ollama-status-badge">Checking...</span>
+            </div>
+            <div class="spec-list">
+              <div class="spec-item">
+                <span class="spec-label">Service Endpoint</span>
+                <span class="spec-val" id="ollama-url-val">http://127.0.0.1:11434</span>
+              </div>
+              <div class="spec-item">
+                <span class="spec-label">Installed Version</span>
+                <span class="spec-val" id="ollama-version-val">-</span>
+              </div>
+              <div class="spec-item">
+                <span class="spec-label">Loaded Models</span>
+                <span class="spec-val" id="ollama-running-val">None</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header" style="flex-wrap:wrap; gap:0.5rem;">
+            <div>
+              <div class="card-title">Model Catalog</div>
+              <div class="card-desc">Discovered local GGUF models and Ollama weights</div>
+            </div>
+            <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+              <button class="btn btn-primary btn-sm" id="btn-scan-models" title="Scan runtimes and directories for new models">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:3px; vertical-align:middle;"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>Scan Models
+              </button>
+              <button class="btn btn-secondary btn-sm" id="btn-refresh-models" title="Check availability of registered models">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:3px; vertical-align:middle;"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>Refresh
+              </button>
+              <button class="btn btn-secondary btn-sm" id="btn-open-add-model" title="Register an existing .gguf file">Add Model</button>
+              <button class="btn btn-secondary btn-sm" id="btn-open-add-dir" title="Add a directory to auto-scan">+ Directory</button>
+            </div>
+          </div>
+
+          <!-- Monitored Model Directories Bar -->
+          <div class="directory-bar">
+            <span class="directory-bar-title">Search Folders:</span>
+            <div id="monitored-dirs-list" class="directory-tags-wrapper">
+              <!-- Dynamically populated directory badges -->
+            </div>
+          </div>
+
+          <!-- Filter and Search Toolbar -->
+          <div class="model-filter-toolbar">
+            <div class="search-wrap">
+              <input type="text" id="model-search-input" class="input input-sm" placeholder="Search models by name, architecture, quant...">
+            </div>
+            <div class="filter-controls">
+              <select id="model-filter-runtime" class="select select-sm">
+                <option value="all">All Runtimes</option>
+                <option value="llama.cpp">llama.cpp</option>
+                <option value="ollama">Ollama</option>
+              </select>
+              <select id="model-filter-format" class="select select-sm">
+                <option value="all">All Formats</option>
+                <option value="GGUF">GGUF</option>
+                <option value="Ollama">Ollama</option>
+              </select>
+              <select id="model-filter-status" class="select select-sm">
+                <option value="all">All Statuses</option>
+                <option value="available">Available Only</option>
+                <option value="offline">Missing / Offline</option>
+              </select>
+              <span id="model-count-badge" class="badge outline" style="align-self:center;">0 models</span>
+            </div>
+          </div>
+
+          <!-- Empty State Container -->
+          <div id="models-empty-state" class="empty-state-box" style="display:none;">
+            <div class="empty-state-icon">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+            </div>
+            <div class="empty-state-title">No local models found. Connect an inference runtime or add a model directory.</div>
+            <p class="empty-state-desc">The catalog is strictly dynamic and contains no mock or machine-specific models. Pull a model in Ollama or add a folder containing .gguf files.</p>
+            <div class="empty-state-actions">
+              <button class="btn btn-primary btn-sm" id="btn-empty-scan">Scan Models</button>
+              <button class="btn btn-secondary btn-sm" id="btn-empty-add-dir">Add Model Directory</button>
+              <button class="btn btn-secondary btn-sm" id="btn-empty-add-file">Add Model File</button>
+            </div>
+          </div>
+
+          <!-- Table Container -->
+          <div class="table-container" id="models-table-container" style="max-height:480px; overflow-y:auto;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Model Name</th>
+                  <th>Architecture</th>
+                  <th>Format / Quant</th>
+                  <th>Size</th>
+                  <th>Runtime</th>
+                  <th>Availability</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="models-table-body">
+                <!-- Dynamically rendered -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 4: INFERENCE CHAT -->
+    <section class="tab-content" id="tab-chat">
+      <div class="chat-container">
+        <div class="chat-header">
+          <div>
+            <span style="font-weight:600; font-size:0.9rem;" id="chat-active-model-title">Model: -</span>
+            <span class="badge primary" id="chat-active-runtime-badge" style="margin-left:0.5rem;">llama.cpp</span>
+            <span class="badge outline" id="chat-active-config-badge">-t 4 | -ngl 0 | -c 2048</span>
+          </div>
+          <div style="display:flex; gap:0.5rem; align-items:center;">
+            <button class="btn btn-secondary btn-sm" id="btn-clear-chat">Clear History</button>
+          </div>
+        </div>
+
+        <div class="chat-messages" id="chat-messages-box">
+          <div class="chat-bubble system">
+            Inference Studio connected to local engine. Prompts are evaluated strictly on your local hardware. No remote telemetry or external API calls are made.
+          </div>
+        </div>
+
+        <div class="chat-controls">
+          <div class="chat-input-row">
+            <textarea class="chat-textarea" id="chat-user-input" placeholder="Type prompt (e.g. 'Explain Python variables with a code example') ... Press Enter to send, Shift+Enter for newline"></textarea>
+            <div style="display:flex; flex-direction:column; gap:0.4rem;">
+              <button class="btn btn-primary" id="btn-send-chat" style="height:60px; min-width:80px;">Send</button>
+              <button class="btn btn-danger btn-sm" id="btn-stop-chat" style="display:none;">Stop</button>
+            </div>
+          </div>
+
+          <div class="chat-subcontrols">
+            <div style="display:flex; gap:1rem; align-items:center;">
+              <label style="display:flex; align-items:center; gap:0.35rem;">
+                <span>Temp:</span>
+                <input type="number" id="chat-temp" class="input" style="width:60px; padding:0.2rem 0.4rem;" value="0.7" step="0.1" min="0" max="2">
+              </label>
+              <label style="display:flex; align-items:center; gap:0.35rem;">
+                <span>Max tokens:</span>
+                <input type="number" id="chat-max-tokens" class="input" style="width:75px; padding:0.2rem 0.4rem;" value="512" step="64" min="32" max="4096">
+              </label>
+              <label class="switch-label">
+                <input type="checkbox" id="chat-stream-toggle" class="switch-input" checked>
+                <span>Streaming SSE</span>
+              </label>
+            </div>
+            <div id="chat-telemetry-strip" style="font-family:var(--font-mono); font-size:0.75rem; color:var(--muted-foreground);">
+              Throughput: <span id="chat-toks-val" style="color:var(--foreground);">0.0</span> t/s | TTFT: <span id="chat-ttft-val" style="color:var(--foreground);">--</span> ms
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 5: LIVE MONITOR -->
+    <section class="tab-content" id="tab-monitor">
+      <div class="grid-4">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">CPU Utilization</span>
+            <span class="badge primary" id="mon-cpu-clock">- MHz</span>
+          </div>
+          <div class="card-value" id="mon-cpu-val">0%</div>
+          <div class="progress-bar-container">
+            <div class="progress-bar-fill" id="mon-cpu-bar" style="width:0%"></div>
+          </div>
+          <div id="mon-cores-breakdown" style="display:grid; grid-template-columns: repeat(4, 1fr); gap:4px; margin-top:0.5rem; font-size:0.7rem; font-family:var(--font-mono);">
+            <!-- Core bars -->
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Memory Allocation</span>
+            <span class="badge warning" id="mon-ram-percent">-</span>
+          </div>
+          <div class="card-value" id="mon-ram-val">0.0 GB</div>
+          <div class="progress-bar-container">
+            <div class="progress-bar-fill warning" id="mon-ram-bar" style="width:0%"></div>
+          </div>
+          <div class="card-subtext" id="mon-ram-sub">Used / Total</div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">GPU Dedicated VRAM</span>
+            <span class="badge" id="mon-gpu-status-badge">Detecting</span>
+          </div>
+          <div class="card-value" id="mon-vram-val">Unavailable</div>
+          <div class="card-subtext" id="mon-gpu-name">GPU name</div>
+          <div class="card-subtext" id="mon-vram-sub">Shared pool: -</div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Tokens / Second</span>
+            <span class="badge" id="mon-infer-state-badge">IDLE</span>
+          </div>
+          <div class="card-value" id="mon-toks-val">0.0 t/s</div>
+          <div class="card-subtext" id="mon-ttft-sub">TTFT: -- ms</div>
+          <div class="card-subtext" id="mon-infer-duration-sub">Session: 0.0s</div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top: 1.25rem; margin-bottom: 1.25rem;">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Hardware & Inference Performance Timeline</div>
+            <div class="card-desc">Real-time rolling history sparklines (last 30 samples)</div>
+          </div>
+          <span class="badge primary">Live Sampling</span>
+        </div>
+        <div class="grid-3" style="margin-top: 0.75rem;">
+          <div>
+            <div style="display:flex; justify-content:space-between; margin-bottom:0.35rem; font-size:0.78rem;">
+              <span style="font-weight:600;">CPU Utilization Trend</span>
+              <span id="spark-cpu-val" style="color:var(--primary); font-family:var(--font-mono);">0%</span>
+            </div>
+            <svg id="sparkline-cpu" class="sparkline-svg" viewBox="0 0 300 60" preserveAspectRatio="none">
+              <polyline fill="none" stroke="var(--primary)" stroke-width="2" points="" />
+            </svg>
+          </div>
+          <div>
+            <div style="display:flex; justify-content:space-between; margin-bottom:0.35rem; font-size:0.78rem;">
+              <span style="font-weight:600;">RAM Allocation Trend</span>
+              <span id="spark-ram-val" style="color:#f59e0b; font-family:var(--font-mono);">0%</span>
+            </div>
+            <svg id="sparkline-ram" class="sparkline-svg" viewBox="0 0 300 60" preserveAspectRatio="none">
+              <polyline fill="none" stroke="#f59e0b" stroke-width="2" points="" />
+            </svg>
+          </div>
+          <div>
+            <div style="display:flex; justify-content:space-between; margin-bottom:0.35rem; font-size:0.78rem;">
+              <span style="font-weight:600;">Inference Throughput Trend</span>
+              <span id="spark-toks-val" style="color:#10b981; font-family:var(--font-mono);">0.0 t/s</span>
+            </div>
+            <svg id="sparkline-toks" class="sparkline-svg" viewBox="0 0 300 60" preserveAspectRatio="none">
+              <polyline fill="none" stroke="#10b981" stroke-width="2" points="" />
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Real-Time Telemetry Stream</span>
+            <span class="badge outline">Authoritative Poll: 2000ms</span>
+          </div>
+          <div class="spec-list" id="mon-telemetry-details">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Drive Utilization & Temperature Status</span>
+            <span class="badge outline">Hardware Sensors</span>
+          </div>
+          <div class="spec-list" id="mon-sensors-details">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 6: BENCHMARK MATRIX -->
+    <section class="tab-content" id="tab-benchmark">
+      <!-- LIVE BENCHMARK RUNNER -->
+      <div class="card" style="margin-bottom: 1.25rem;">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Hardware Inference Benchmark Studio</div>
+            <div class="card-desc">Execute standardized prompt throughput and memory benchmarks on local hardware</div>
+          </div>
+          <span class="badge primary" id="bench-runner-badge">Live Runner</span>
+        </div>
+
+        <div class="grid-3" style="gap: 0.75rem; margin-top: 0.5rem;">
+          <div class="form-group">
+            <label class="form-label">Target Model</label>
+            <select class="select" id="bench-select-model">
+              <!-- Dynamically populated from state.models -->
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Inference Runtime</label>
+            <select class="select" id="bench-select-runtime">
+              <option value="ollama">Ollama service</option>
+              <option value="llama.cpp server">llama.cpp server</option>
+              <option value="transformers">Transformers (PyTorch)</option>
+              <option value="onnxruntime">ONNX Runtime</option>
+              <option value="mlx">Apple Silicon MLX</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Context Size</label>
+            <input type="number" class="input" id="bench-input-context" value="2048" step="512" min="512" max="32768">
+          </div>
+        </div>
+
+        <div class="grid-3" style="gap: 0.75rem;">
+          <div class="form-group">
+            <label class="form-label">CPU Threads</label>
+            <input type="number" class="input" id="bench-input-threads" value="4" min="1" max="64">
+          </div>
+          <div class="form-group">
+            <label class="form-label">GPU Offload Layers (-ngl)</label>
+            <input type="number" class="input" id="bench-input-gpu" value="0" min="0" max="100">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Max Generation Tokens</label>
+            <input type="number" class="input" id="bench-input-tokens" value="128" min="16" max="2048">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Benchmark Test Prompt</label>
+          <input type="text" class="input" id="bench-input-prompt" value="Explain how memory quantization enables large language models to run on consumer hardware.">
+        </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top: 1rem;">
+          <span id="bench-status-msg" style="font-size:0.8rem; color:var(--muted-foreground);">Ready to benchmark local hardware</span>
+          <button class="btn btn-primary" id="btn-run-benchmark">Execute Benchmark Run</button>
+        </div>
+      </div>
+
+      <!-- MEASURED BENCHMARK RUNS TABLE -->
+      <div class="card" style="margin-bottom: 1.25rem;">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Measured Local Benchmark Runs</div>
+            <div class="card-desc">Persisted benchmark history from storage/benchmarks.json</div>
+          </div>
+          <button class="btn btn-outline btn-sm" id="btn-refresh-benchmarks">Refresh</button>
+        </div>
+
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>Model</th>
+                <th>Runtime</th>
+                <th>Threads / NGL</th>
+                <th>Throughput</th>
+                <th>TTFT</th>
+                <th>RAM Peak</th>
+                <th>Status</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="bench-measured-tbody">
+              <tr><td colspan="9" style="text-align:center; color:var(--muted-foreground);">No local benchmark runs recorded yet. Click 'Execute Benchmark Run' above.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- AUTOMATED MODEL-QUALITY EVALUATION SUITE -->
+      <div class="card" style="margin-bottom: 1.25rem;">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Automated Model-Quality Evaluation Suite</div>
+            <div class="card-desc">6-task standardized battery testing instruction adherence, factuality, reasoning, code, and structured JSON</div>
+          </div>
+          <button class="btn btn-primary btn-sm" id="btn-run-quality-eval">Run Quality Evaluation Suite</button>
+        </div>
+
+        <div class="grid-2" style="gap:0.75rem; margin-top:0.5rem; margin-bottom:1rem;">
+          <div class="form-group">
+            <label class="form-label">Evaluation Target Model</label>
+            <select class="select" id="eval-select-model">
+              <!-- Dynamically populated -->
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Evaluation Runtime</label>
+            <select class="select" id="eval-select-runtime">
+              <option value="ollama">Ollama service</option>
+              <option value="llama.cpp server">llama.cpp server</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="eval-status-indicator" style="display:none; padding:1rem; background:rgba(37,99,235,0.1); border:1px solid rgba(37,99,235,0.3); border-radius:var(--radius-sm); margin-bottom:1rem; font-size:0.85rem;">
+          <div style="font-weight:600; color:#60a5fa; margin-bottom:0.25rem;">Running Quality Evaluation Battery...</div>
+          <div style="color:var(--muted-foreground);" id="eval-status-detail">Executing test tasks against active model...</div>
+        </div>
+
+        <div id="eval-results-container">
+          <div style="font-size:0.85rem; color:var(--muted-foreground); text-align:center; padding:1.5rem 0;">
+            No quality evaluation run yet. Select a model and click "Run Quality Evaluation Suite" to run the 6-task battery.
+          </div>
+        </div>
+      </div>
+
+      <div class="alert alert-info" style="margin-bottom:1.25rem;">
+        <div>
+          <strong>Empirical Benchmark Reference (Workstation Baseline):</strong>
+          <div style="margin-top:0.25rem;">These records reflect historical experiments conducted on the original research test machine (Intel Core i5-4570 @ 3.20GHz, 16GB DDR3 RAM, NVIDIA GT 730, C: SSD, D: HDD). They provide empirical ground truth for throughput comparisons across model scales, CPU vs GPU layer offloading, and SSD vs HDD latency.</div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:1.25rem;">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Benchmark Test Matrix (B01 - B08)</div>
+            <div class="card-desc">Recorded tokens/sec, RAM consumption, and prompt processing times</div>
+          </div>
+          <span class="badge primary">Empirical Baseline</span>
+        </div>
+
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Model / Runtime</th>
+                <th>Configuration</th>
+                <th>Storage / Context</th>
+                <th>Measured Result</th>
+              </tr>
+            </thead>
+            <tbody id="bm-matrix-tbody">
+              <!-- Dynamically populated from /api/v1/benchmark/summary -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="grid-3">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Model Scale Comparison</span>
+          </div>
+          <div class="spec-list">
+            <div class="spec-item">
+              <span class="spec-label">Qwen3.5-0.8B (llama.cpp)</span>
+              <span class="spec-val">19.85 - 20.46 t/s</span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-label">llama3.2:1b (Ollama)</span>
+              <span class="spec-val">12.77 t/s (gen) / 65.2 t/s (prefill)</span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-label">Qwen3.5-4B (llama.cpp)</span>
+              <span class="spec-val">4.3 - 4.7 t/s (RAM ~12.7 GB)</span>
+            </div>
+          </div>
+          <div class="card-subtext" style="margin-top:0.75rem;">
+            Empirical limit: 4B models saturate 4-core desktop CPUs at 100% util and consume ~12.7 GB RAM.
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Storage: SSD (C:) vs HDD (D:)</span>
+          </div>
+          <div class="spec-list">
+            <div class="spec-item">
+              <span class="spec-label">SSD Model Load Time</span>
+              <span class="spec-val">~4.0 seconds</span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-label">HDD Model Load Time</span>
+              <span class="spec-val">~4.6 seconds</span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-label">SSD Prompt Processing</span>
+              <span class="spec-val">24.17 t/s</span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-label">HDD Prompt Processing</span>
+              <span class="spec-val">25.86 t/s</span>
+            </div>
+          </div>
+          <div class="card-subtext" style="margin-top:0.75rem;">
+            Both drives successfully run via mmap. HDD exhibits initial disk seek spikes, but sustained inference generation is comparable.
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">GPU Offload Analysis (Legacy Architecture)</span>
+          </div>
+          <div class="spec-list">
+            <div class="spec-item">
+              <span class="spec-label">CPU-only (-ngl 0)</span>
+              <span class="spec-val">4.32 - 4.59 t/s</span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-label">1 Layer Offload (-ngl 1)</span>
+              <span class="spec-val">4.51 - 4.71 t/s (0.6 GB VRAM)</span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-label">5 Layers Offload (-ngl 5)</span>
+              <span class="spec-val">~4.52 t/s (0.6 GB VRAM)</span>
+            </div>
+          </div>
+          <div class="card-subtext" style="margin-top:0.75rem;">
+            Key finding: Legacy DDR3 cards across PCIe 2.0 yield negligible speed improvement due to transfer bus bottlenecks. CPU execution is recommended.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 7: DIAGNOSTICS -->
+    <section class="tab-content" id="tab-diagnostics">
+      <div class="card" style="margin-bottom:1.25rem;">
+        <div class="card-header">
+          <div>
+            <div class="card-title">System Health & Diagnostic Checks</div>
+            <div class="card-desc">Automated validation of backend, runtimes, hardware, permissions, and port availability</div>
+          </div>
+          <div style="display:flex; gap:0.5rem; align-items:center;">
+            <span class="badge" id="diag-overall-badge">Checking...</span>
+            <button class="btn btn-primary btn-sm" id="btn-run-full-diag">Run Diagnostics</button>
+          </div>
+        </div>
+
+        <div class="spec-list" id="diag-checks-list">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div style="display:flex; align-items:center; gap:0.75rem;">
+            <span class="card-title">Runtime Log Inspector</span>
+            <button class="btn btn-secondary btn-sm" id="btn-show-llama-log">llama-server.log</button>
+            <button class="btn btn-secondary btn-sm" id="btn-show-app-log">app.log</button>
+          </div>
+          <button class="btn btn-outline btn-sm" id="btn-refresh-log">Refresh</button>
+        </div>
+        <div class="log-viewer" id="log-display-box">Loading server log...</div>
+      </div>
+    </section>
+
+    <!-- TAB 8: SETTINGS & PROJECT 3 API -->
+    <section class="tab-content" id="tab-settings">
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Engine Configuration</div>
+              <div class="card-desc">Persistent runtime configuration in storage/config.json</div>
+            </div>
+            <button class="btn btn-primary btn-sm" id="btn-save-settings">Save Changes</button>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Active Inference Runtime</label>
+            <select class="select" id="cfg-active-runtime">
+              <option value="llama.cpp server">llama.cpp server mode</option>
+              <option value="ollama">Ollama service</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">llama.cpp Executable Path</label>
+            <input type="text" class="input" id="cfg-llama-exe" placeholder="e.g. /usr/local/bin/llama-server or ..\abc-llama\llamacpp\llama-server.exe">
+            <div class="form-hint">Points to llama-server binary. Auto-discovered if installed in PATH or standard paths.</div>
+          </div>
+
+          <div class="grid-2" style="gap:0.75rem;">
+            <div class="form-group">
+              <label class="form-label">llama.cpp Host</label>
+              <input type="text" class="input" id="cfg-llama-host" value="127.0.0.1">
+            </div>
+            <div class="form-group">
+              <label class="form-label">llama.cpp Port</label>
+              <input type="number" class="input" id="cfg-llama-port" value="8080">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Ollama Base URL</label>
+            <input type="text" class="input" id="cfg-ollama-url" value="http://127.0.0.1:11434">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Model Search Directories</label>
+            <textarea class="textarea" id="cfg-model-dirs" rows="2"></textarea>
+            <div class="form-hint">One relative or absolute path per line (e.g. models)</div>
+          </div>
+
+          <div class="separator"></div>
+
+          <div style="font-weight:600; font-size:0.85rem; margin-bottom:0.75rem;">Security & Network Access (Project 3 Remote Access)</div>
+
+          <div class="form-group">
+            <label class="switch-label">
+              <input type="checkbox" id="cfg-allow-remote" class="switch-input">
+              <span>Allow Remote Network Access (Binds to 0.0.0.0 instead of 127.0.0.1)</span>
+            </label>
+            <div class="form-hint">Keep disabled if Project 3 runs on the same computer as this engine.</div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Engine API Key (Authentication Token)</label>
+            <input type="text" class="input" id="cfg-api-key" placeholder="Leave empty for open local access, or set token for authorized access">
+            <div class="form-hint">When set, clients must pass this token in the 'X-API-Key' or 'Authorization: Bearer' header.</div>
+          </div>
+
+          <div class="grid-2" style="gap:0.75rem;">
+            <div class="form-group">
+              <label class="form-label">Listen Host</label>
+              <input type="text" class="input" id="cfg-listen-host" value="127.0.0.1">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Listen Port</label>
+              <input type="number" class="input" id="cfg-listen-port" value="8000">
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Project 3 Unified API Integration</div>
+              <div class="card-desc">Runtime-independent REST endpoints for Project 3 consumption</div>
+            </div>
+            <span class="badge success">Standard API</span>
+          </div>
+
+          <div style="font-size:0.8rem; color:var(--muted-foreground); margin-bottom:0.75rem;">
+            Project 3 connects directly to this unified inference engine without knowing whether llama.cpp or Ollama is executing the weights.
+          </div>
+
+          <div style="font-weight:600; font-size:0.82rem; margin-top:0.5rem;">1. Standardized Inference Generation</div>
+          <div class="code-block">POST /api/v1/inference/generate
+Content-Type: application/json
+X-API-Key: &lt;optional-api-key&gt;
+
+{
+  "prompt": "Explain this architecture document.",
+  "stream": false,
+  "temperature": 0.7,
+  "max_tokens": 512
+}</div>
+
+          <div style="font-weight:600; font-size:0.82rem; margin-top:0.5rem;">2. Standardized Response Payload</div>
+          <div class="code-block">{
+  "model": "Qwen3.5-4B-Q4_K_M.gguf",
+  "runtime": "llama.cpp server",
+  "prompt": "Explain this architecture document.",
+  "response": "Here is the explanation...",
+  "metrics": {
+    "tokens_generated": 112,
+    "tokens_per_second": 14.2,
+    "time_to_first_token_sec": 0.35,
+    "total_duration_sec": 7.88
+  }
+}</div>
+
+          <div style="font-weight:600; font-size:0.82rem; margin-top:0.5rem;">3. Python Integration Snippet for Project 3</div>
+          <div class="code-block">import httpx
+
+# Connect locally or remotely
+client = httpx.Client(
+    base_url="http://127.0.0.1:8000",
+    headers={"X-API-Key": "YOUR_API_KEY"} # if enabled
+)
+
+# Standardized prompt execution
+resp = client.post("/api/v1/inference/generate", json={
+    "prompt": "Summarize the key findings.",
+    "stream": False
+})
+data = resp.json()
+print("Response:", data["response"])
+print(f"Speed: {data['metrics']['tokens_per_second']} t/s")</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 9: DEPLOYMENT & PACKAGING -->
+    <section class="tab-content" id="tab-packaging">
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Cross-Platform Packaging & Launch Scripts</div>
+              <div class="card-desc">Zero-configuration startup automation in packaging/</div>
+            </div>
+            <span class="badge success">Cross-Platform</span>
+          </div>
+
+          <div style="font-size:0.85rem; color:var(--muted-foreground); margin-bottom:1rem;">
+            The engine is engineered to run seamlessly across Windows, Linux, and macOS without machine-specific assumptions or hardcoded dependencies.
+          </div>
+
+          <div class="spec-list">
+            <div class="spec-item" style="padding:0.75rem 0;">
+              <div>
+                <div style="font-weight:600; font-size:0.9rem; color:var(--foreground);">1. Windows (packaging/windows.bat)</div>
+                <div style="font-size:0.75rem; color:var(--muted-foreground); margin-top:0.25rem;">
+                  Validates Python 3.10+, provisions virtual environment (.venv), installs requirements, detects Ollama daemon / llama-server, checks hardware via WMI/powershell, starts backend, and opens web dashboard.
+                </div>
+                <div class="code-block" style="margin-top:0.5rem; font-size:0.75rem;">packaging\windows.bat</div>
+              </div>
+            </div>
+
+            <div class="spec-item" style="padding:0.75rem 0;">
+              <div>
+                <div style="font-weight:600; font-size:0.9rem; color:var(--foreground);">2. Linux (packaging/linux.sh)</div>
+                <div style="font-size:0.75rem; color:var(--muted-foreground); margin-top:0.25rem;">
+                  Executable bash installer. Checks python3-venv, detects CUDA/ROCm, sets ulimits, checks Ollama service or systemd daemon, binds port 8000, and launches default browser.
+                </div>
+                <div class="code-block" style="margin-top:0.5rem; font-size:0.75rem;">chmod +x packaging/linux.sh && ./packaging/linux.sh</div>
+              </div>
+            </div>
+
+            <div class="spec-item" style="padding:0.75rem 0;">
+              <div>
+                <div style="font-weight:600; font-size:0.9rem; color:var(--foreground);">3. macOS / Apple Silicon (packaging/macos.sh)</div>
+                <div style="font-size:0.75rem; color:var(--muted-foreground); margin-top:0.25rem;">
+                  Detects Apple Silicon (M1/M2/M3/M4) unified memory vs Intel Macs, configures Metal GPU acceleration, activates Apple MLX support, provisions venv, and opens the dashboard.
+                </div>
+                <div class="code-block" style="margin-top:0.5rem; font-size:0.75rem;">chmod +x packaging/macos.sh && ./packaging/macos.sh</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Local-First Architecture vs Cloud Hosting</div>
+              <div class="card-desc">Why this engine is built for workstation execution</div>
+            </div>
+            <span class="badge primary">Local-First</span>
+          </div>
+
+          <div style="font-size:0.83rem; line-height:1.6; color:var(--muted-foreground);">
+            <div style="margin-bottom:0.75rem;">
+              <strong style="color:var(--foreground);">Why public cloud deployment is technically inapplicable:</strong>
+              When an AI application is deployed to a public web host (e.g. Vercel, Heroku, AWS), the backend executes on the cloud provider's remote server. A web browser has no operating-system permission to inspect the visitor's local RAM, read local disk files, access local PCI buses, or offload neural weights to the user's discrete GPU.
+            </div>
+            <div style="margin-bottom:0.75rem;">
+              <strong style="color:var(--foreground);">Local Daemon + Browser UI Pattern:</strong>
+              This engine follows the industry-standard architecture used by Ollama, llama.cpp, Stable Diffusion WebUI, and Docker Desktop:
+              <ul style="margin-top:0.35rem; margin-left:1.25rem; font-size:0.8rem;">
+                <li>The Python engine runs locally as a native background daemon on <code>127.0.0.1:8000</code>.</li>
+                <li>The browser connects locally to direct OS hardware detection (via <code>psutil</code>, WMI, sysfs, and sysctl).</li>
+                <li>Model weights remain 100% private on local NVMe/SSD/HDD storage without network egress.</li>
+                <li>Zero token cost, zero bandwidth bottleneck, zero cloud vendor lock-in.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-2" style="margin-top:1.25rem;">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Standalone Executable Compilation (PyInstaller)</div>
+              <div class="card-desc">Package into a zero-dependency self-contained executable</div>
+            </div>
+            <span class="badge outline">Standalone Binary</span>
+          </div>
+
+          <div style="font-size:0.82rem; color:var(--muted-foreground); margin-bottom:0.75rem;">
+            To distribute the engine to users without requiring Python to be installed:
+          </div>
+
+          <div class="code-block" style="font-size:0.75rem;"># Install PyInstaller
+pip install pyinstaller
+
+# Build self-contained executable with embedded frontend assets
+pyinstaller --noconfirm --onedir --name "LM-LH-Engine" \
+  --add-data "frontend;frontend" \
+  --add-data "storage;storage" \
+  --hidden-import "uvicorn" \
+  --hidden-import "fastapi" \
+  --hidden-import "psutil" \
+  main.py</div>
+
+          <div class="card-subtext" style="margin-top:0.75rem;">
+            Produces a distributable folder <code>dist/LM-LH-Engine/</code> containing the compiled binary and all assets.
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Multi-Runtime Ecosystem Support</div>
+              <div class="card-desc">Status of all 7 integrated runtime adapters</div>
+            </div>
+            <button class="btn btn-outline btn-sm" id="btn-refresh-runtimes-pkg">Check Status</button>
+          </div>
+
+          <div class="spec-list" id="pkg-runtime-matrix">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ADD MODEL FILE MODAL -->
+  <div class="modal-backdrop" id="modal-add-model">
+    <div class="modal">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+        <strong style="font-size:1rem;">Add Existing Model File</strong>
+        <button class="btn btn-outline btn-sm btn-close-modal" data-modal="modal-add-model">✕</button>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Absolute or Relative GGUF Model Path</label>
+        <input type="text" class="input" id="input-model-path" placeholder="e.g. models/model.gguf or D:\ai\custom.gguf">
+        <div class="form-hint">Points directly to an existing .gguf file. No files will be moved or downloaded.</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Select via File Browser</label>
+        <input type="file" id="input-model-file-picker" accept=".gguf,.bin" class="input" style="font-size:0.75rem; padding:0.35rem;">
+        <div class="form-hint">Selecting a file automatically updates the path field.</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Custom Display Name (Optional)</label>
+        <input type="text" class="input" id="input-model-name" placeholder="Leave empty to use file name">
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:0.5rem; margin-top:1.25rem;">
+        <button class="btn btn-secondary btn-sm btn-close-modal" data-modal="modal-add-model">Cancel</button>
+        <button class="btn btn-primary btn-sm" id="btn-submit-add-model">Register Model</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADD DIRECTORY MODAL -->
+  <div class="modal-backdrop" id="modal-add-directory">
+    <div class="modal">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+        <strong style="font-size:1rem;">Add Model Search Directory</strong>
+        <button class="btn btn-outline btn-sm btn-close-modal" data-modal="modal-add-directory">✕</button>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Directory Path</label>
+        <input type="text" class="input" id="input-dir-path" placeholder="e.g. models or D:\LocalModels">
+        <div class="form-hint">The engine will scan this directory for supported .gguf files and register them dynamically.</div>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:0.5rem; margin-top:1.25rem;">
+        <button class="btn btn-secondary btn-sm btn-close-modal" data-modal="modal-add-directory">Cancel</button>
+        <button class="btn btn-primary btn-sm" id="btn-submit-add-dir">Add & Scan Directory</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODEL DETAILS MODAL -->
+  <div class="modal-backdrop" id="modal-model-details">
+    <div class="modal modal-lg">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+        <div>
+          <strong style="font-size:1rem;" id="details-modal-title">Model Technical Metadata</strong>
+          <div style="font-size:0.75rem; color:var(--muted-foreground);" id="details-modal-id">-</div>
+        </div>
+        <button class="btn btn-outline btn-sm btn-close-modal" data-modal="modal-model-details">✕</button>
+      </div>
+      <div class="modal-details-grid" id="details-modal-grid">
+        <!-- Rendered dynamically -->
+      </div>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:1.25rem;">
+        <span class="badge" id="details-modal-status-badge">Available</span>
+        <button class="btn btn-secondary btn-sm btn-close-modal" data-modal="modal-model-details">Close</button>
+      </div>
+    </div>
+  </div>
+
+    <!-- ONE-CLICK ADVISOR SETUP MODAL -->
+  <div class="modal-backdrop" id="modal-advisor-setup">
+    <div class="modal modal-lg">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+        <div>
+          <strong style="font-size:1.05rem;" id="setup-modal-title">One-Click Model Setup Pipeline</strong>
+          <div style="font-size:0.75rem; color:var(--muted-foreground);" id="setup-modal-subtitle">Automated download, quantization calibration, registry, and inference verification</div>
+        </div>
+        <button class="btn btn-outline btn-sm btn-close-modal" data-modal="modal-advisor-setup">✕</button>
+      </div>
+
+      <!-- Setup Specification Review -->
+      <div class="card" style="background:var(--secondary); padding:0.75rem; margin-bottom:1rem; border:1px solid var(--border);">
+        <div class="grid-3" style="gap:0.75rem; font-size:0.8rem;">
+          <div><span style="color:var(--muted-foreground);">Model:</span> <strong id="setup-spec-name">-</strong></div>
+          <div><span style="color:var(--muted-foreground);">Quantization:</span> <strong id="setup-spec-quant">-</strong></div>
+          <div><span style="color:var(--muted-foreground);">Weight Size:</span> <strong id="setup-spec-size">-</strong></div>
+          <div><span style="color:var(--muted-foreground);">Target Runtime:</span> <strong id="setup-spec-runtime">-</strong></div>
+          <div><span style="color:var(--muted-foreground);">Working RAM:</span> <strong id="setup-spec-ram">-</strong></div>
+          <div><span style="color:var(--muted-foreground);">License:</span> <strong id="setup-spec-license">-</strong></div>
+        </div>
+      </div>
+
+      <!-- Pre-flight Validation Checklist -->
+      <div id="setup-preflight-panel" style="margin-bottom:1rem;">
+        <strong style="font-size:0.85rem; display:block; margin-bottom:0.5rem;">Pre-Flight System Verification</strong>
+        <div style="background:var(--background); border:1px solid var(--border); border-radius:var(--radius); padding:0.75rem; font-size:0.8rem;">
+          <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.4rem;">
+            <span style="color:#10b981;">✓</span>
+            <span>Disk Space Margin: <strong id="setup-chk-disk">- GB free (+ 2GB margin verified)</strong></span>
+          </div>
+          <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.4rem;">
+            <span style="color:#10b981;">✓</span>
+            <span>Memory Headroom: <strong id="setup-chk-ram">- GB available RAM</strong></span>
+          </div>
+          <div style="display:flex; align-items:center; gap:0.5rem;">
+            <span style="color:#10b981;">✓</span>
+            <span>Runtime Compatibility: <strong id="setup-chk-runtime">Compatible</strong></span>
+          </div>
+        </div>
+
+        <div style="margin-top:0.75rem; background:rgba(59, 130, 246, 0.08); border:1px solid rgba(59, 130, 246, 0.25); border-radius:var(--radius); padding:0.75rem;">
+          <label style="display:flex; align-items:flex-start; gap:0.5rem; font-size:0.8rem; cursor:pointer;">
+            <input type="checkbox" id="setup-license-checkbox" style="margin-top:2px;">
+            <span>
+              <strong>Model License Confirmation:</strong> I confirm that I accept the license terms (<span id="setup-license-name">-</span>) for downloading and using these model weights locally on this machine.
+            </span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Progress Tracking Panel (Visible during download/setup) -->
+      <div id="setup-progress-panel" style="display:none; margin-bottom:1rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.35rem;">
+          <strong style="font-size:0.85rem;" id="setup-stage-label">Downloading Model Weights...</strong>
+          <span style="font-weight:700; font-size:0.9rem;" id="setup-percent-label">0%</span>
+        </div>
+        <div class="progress-bar-container" style="height:10px; margin-bottom:0.6rem;">
+          <div class="progress-bar-fill primary" id="setup-progress-bar" style="width:0%;"></div>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:0.75rem; color:var(--muted-foreground); margin-bottom:0.75rem;">
+          <div>Downloaded: <span id="setup-bytes-label">0 MB / 0 MB</span></div>
+          <div>Speed: <span id="setup-speed-label">0.0 MB/s</span></div>
+          <div>ETA: <span id="setup-eta-label">0s</span></div>
+        </div>
+
+        <!-- Verification Output Box -->
+        <div id="setup-verification-box" style="display:none; background:var(--background); border:1px solid var(--border); border-radius:var(--radius); padding:0.75rem; font-size:0.8rem; margin-top:0.5rem;">
+          <div style="color:#10b981; font-weight:600; margin-bottom:0.25rem;">✓ Inference Verification Passed</div>
+          <div style="color:var(--muted-foreground); font-size:0.75rem;" id="setup-verification-details">-</div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div style="display:flex; justify-content:flex-end; gap:0.5rem; margin-top:1rem;">
+        <button class="btn btn-secondary btn-sm" id="btn-cancel-setup" style="display:none;">Cancel Setup</button>
+        <button class="btn btn-secondary btn-sm btn-close-modal" data-modal="modal-advisor-setup" id="btn-close-setup-modal">Close</button>
+        <button class="btn btn-primary btn-sm" id="btn-start-setup-confirmed">Confirm & Start One-Click Setup</button>
+        <button class="btn btn-primary btn-sm" id="btn-goto-chat" style="display:none;">Open in Inference Studio →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RUNTIME INSTALLATION GUIDE MODAL -->
+  <div class="modal-backdrop" id="modal-runtime-guide">
+    <div class="modal modal-lg">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+        <div>
+          <strong style="font-size:1.05rem;" id="guide-modal-title">Inference Runtime Installation Guide</strong>
+          <div style="font-size:0.75rem; color:var(--muted-foreground);">Step-by-step installation instructions, CLI commands, and connection verification</div>
+        </div>
+        <button class="btn btn-outline btn-sm btn-close-modal" data-modal="modal-runtime-guide">✕</button>
+      </div>
+
+      <!-- Runtime Selector Tabs -->
+      <div class="runtime-guide-tabs" id="guide-runtime-tabs" style="display:flex; gap:0.4rem; overflow-x:auto; margin-bottom:1rem; padding-bottom:4px;">
+        <!-- Dynamic tabs -->
+      </div>
+
+      <!-- Guide Content Box -->
+      <div id="guide-content-box" style="background:var(--secondary); border:1px solid var(--border); border-radius:var(--radius); padding:1rem;">
+        <!-- Dynamic guide details -->
+      </div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:1.25rem;">
+        <button class="btn btn-outline btn-sm" id="btn-guide-test-conn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          Check Connection Again
+        </button>
+        <button class="btn btn-secondary btn-sm btn-close-modal" data-modal="modal-runtime-guide">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SIDE-BY-SIDE MODEL COMPARISON MODAL -->
+  <div class="modal-backdrop" id="modal-model-compare">
+    <div class="modal modal-xl" style="max-width:960px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+        <div>
+          <strong style="font-size:1.05rem;">Side-by-Side Model Architecture & Resource Comparison</strong>
+          <div style="font-size:0.75rem; color:var(--muted-foreground);">Compare parameters, quantization trade-offs, RAM requirements, and estimated token speeds</div>
+        </div>
+        <button class="btn btn-outline btn-sm btn-close-modal" data-modal="modal-model-compare">✕</button>
+      </div>
+
+      <div style="overflow-x:auto; max-height:65vh;" id="compare-table-container">
+        <!-- Comparison Table rendered dynamically -->
+      </div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:1.25rem;">
+        <button class="btn btn-outline btn-sm" id="btn-clear-comparison">Clear All Selected</button>
+        <button class="btn btn-secondary btn-sm btn-close-modal" data-modal="modal-model-compare">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-container" id="toast-box"></div>
+
+  <script src="/script.js"></script>
+</body>
+</html>

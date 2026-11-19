@@ -1,0 +1,589 @@
+[
+  {
+    "id": "eval_8533625a",
+    "timestamp": "2026-11-19 23:52:43",
+    "model": "llama3.2:1b",
+    "model_id": "llama3.2:1b",
+    "runtime": "ollama",
+    "tasks": [
+      {
+        "task_id": "instruction_following",
+        "task_name": "Instruction Following & Output Constraints",
+        "prompt": "List exactly 3 advantages of quantized models over full-precision models. Number each item 1 to 3 with no introductory or concluding text.",
+        "response": "1. Reduced computational complexity\n2. Improved accuracy in high-dimensional data\n3. Enhanced interpretability and explainability",
+        "score": 10.0,
+        "max_score": 10.0,
+        "rationale": "Exactly 3 numbered items provided as instructed.",
+        "duration_ms": 6735.8
+      }
+    ],
+    "composite_score": 10.0,
+    "max_score": 10.0,
+    "human_rating": 9.0,
+    "human_feedback": "Test human validation review",
+    "hardware": {
+      "cpu": "Intel64 Family 6 Model 60 Stepping 3, GenuineIntel",
+      "ram_total_gb": 15.96,
+      "gpu": "N/A",
+      "os": "Windows 10"
+    },
+    "human_evaluator": "AutomatedTest"
+  },
+  {
+    "id": "eval_db102e55",
+    "timestamp": "2026-11-19 23:50:48",
+    "model": "llama3.2:1b",
+    "model_id": "llama3.2:1b",
+    "runtime": "ollama",
+    "tasks": [
+      {
+        "task_id": "instruction_following",
+        "task_name": "Instruction Following & Output Constraints",
+        "prompt": "List exactly 3 advantages of quantized models over full-precision models. Number each item 1 to 3 with no introductory or concluding text.",
+        "response": "1. Reduced computational complexity\n2. Improved accuracy in certain applications\n3. Enhanced interpretability and explainability",
+        "score": 10.0,
+        "max_score": 10.0,
+        "rationale": "Exactly 3 numbered items provided as instructed.",
+        "duration_ms": 6575.9
+      }
+    ],
+    "composite_score": 10.0,
+    "max_score": 10.0,
+    "human_rating": 9.0,
+    "human_feedback": "Test human validation review",
+    "hardware": {
+      "cpu": "Intel64 Family 6 Model 60 Stepping 3, GenuineIntel",
+      "ram_total_gb": 15.96,
+      "gpu": "N/A",
+      "os": "Windows 10"
+    },
+    "human_evaluator": "AutomatedTest"
+  },
+  {
+    "id": "eval_ef24915d",
+    "timestamp": "2026-11-19 23:49:05",
+    "model": "llama3.2:1b",
+    "model_id": "llama3.2:1b",
+    "runtime": "ollama",
+    "tasks": [
+      {
+        "task_id": "instruction_following",
+        "task_name": "Instruction Following & Output Constraints",
+        "prompt": "List exactly 3 advantages of quantized models over full-precision models. Number each item 1 to 3 with no introductory or concluding text.",
+        "response": "1. Reduced computational complexity\n2. Improved accuracy in high-dimensional spaces\n3. Enhanced interpretability and explainability",
+        "score": 10.0,
+        "max_score": 10.0,
+        "rationale": "Exactly 3 numbered items provided as instructed.",
+        "duration_ms": 6827.3
+      }
+    ],
+    "composite_score": 10.0,
+    "max_score": 10.0,
+    "human_rating": 9.0,
+    "human_feedback": "Test human validation review",
+    "hardware": {
+      "cpu": "Intel64 Family 6 Model 60 Stepping 3, GenuineIntel",
+      "ram_total_gb": 15.96,
+      "gpu": "N/A",
+      "os": "Windows 10"
+    },
+    "human_evaluator": "AutomatedTest"
+  },
+  {
+    "id": "eval_f7c48738",
+    "timestamp": "2026-11-19 23:33:42",
+    "model": "llama3.2:1b",
+    "model_id": "llama3.2:1b",
+    "runtime": "ollama",
+    "tasks": [
+      {
+        "task_id": "instruction_following",
+        "task_name": "Instruction Following & Output Constraints",
+        "prompt": "List exactly 3 advantages of quantized models over full-precision models. Number each item 1 to 3 with no introductory or concluding text.",
+        "response": "1. Reduced computational complexity\n2. Improved accuracy in high-dimensional spaces\n3. Enhanced interpretability and explainability",
+        "score": 10.0,
+        "max_score": 10.0,
+        "rationale": "Exactly 3 numbered items provided as instructed.",
+        "duration_ms": 6492.0
+      }
+    ],
+    "composite_score": 10.0,
+    "max_score": 10.0,
+    "human_rating": 9.0,
+    "human_feedback": "Test human validation review",
+    "hardware": {
+      "cpu": "Intel64 Family 6 Model 60 Stepping 3, GenuineIntel",
+      "ram_total_gb": 15.96,
+      "gpu": "N/A",
+      "os": "Windows 10"
+    },
+    "human_evaluator": "AutomatedTest"
+  },
+  {
+    "id": "eval_2c18825d",
+    "timestamp": "2026-11-19 23:16:27",
+    "model": "llama3.2:1b",
+    "model_id": "llama3.2:1b",
+    "runtime": "ollama",
+    "tasks": [
+      {
+        "task_id": "instruction_following",
+        "task_name": "Instruction Following & Output Constraints",
+        "prompt": "List exactly 3 advantages of quantized models over full-precision models. Number each item 1 to 3 with no introductory or concluding text.",
+        "response": "1. Reduced computational complexity\n2. Improved accuracy in high-dimensional spaces\n3. Enhanced interpretability through quantization",
+        "score": 10.0,
+        "max_score": 10.0,
+        "rationale": "Exactly 3 numbered items provided as instructed.",
+        "duration_ms": 8959.8
+      }
+    ],
+    "composite_score": 10.0,
+    "max_score": 10.0,
+    "human_rating": 9.0,
+    "human_feedback": "Test human validation review",
+    "hardware": {
+      "cpu": "Intel64 Family 6 Model 60 Stepping 3, GenuineIntel",
+      "ram_total_gb": 15.96,
+      "gpu": "N/A",
+      "os": "Windows 10"
+    },
+    "human_evaluator": "AutomatedTest"
+  },
+  {
+    "id": "eval_3b593f57",
+    "timestamp": "2026-11-19 23:13:32",
+    "model": "llama3.2:1b",
+    "model_id": "llama3.2:1b",
+    "runtime": "ollama",
+    "tasks": [
+      {
+        "task_id": "instruction_following",
+        "task_name": "Instruction Following & Output Constraints",
+        "prompt": "List exactly 3 advantages of quantized models over full-precision models. Number each item 1 to 3 with no introductory or concluding text.",
+        "response": "1. Reduced computational complexity\n2. Improved accuracy in high-dimensional data\n3. Enhanced interpretability through quantization",
+        "score": 10.0,
+        "max_score": 10.0,
+        "rationale": "Exactly 3 numbered items provided as instructed.",
+        "duration_ms": 7177.5
+      }
+    ],
+    "composite_score": 10.0,
+    "max_score": 10.0,
+    "human_rating": 9.0,
+    "human_feedback": "Test human validation review",
+    "hardware": {
+      "cpu": "Intel64 Family 6 Model 60 Stepping 3, GenuineIntel",
+      "ram_total_gb": 15.96,
+      "gpu": "N/A",
+      "os": "Windows 10"
+    },
+    "human_evaluator": "AutomatedTest"
+  },
+  {
+    "id": "eval_fe550470",
+    "timestamp": "2026-11-19 22:59:32",
+    "model": "default",
+    "model_id": "default",
+    "runtime": "default",
+    "tasks": [
+      {
+        "task_id": "instruction_following",
+        "task_name": "Instruction Following & Output Constraints",
+        "prompt": "List exactly 3 advantages of quantized models over full-precision models. Number each item 1 to 3 with no introductory or concluding text.",
+        "response": "Evaluation error: llama.cpp server is not running. Please start it first.",
+        "score": 0.0,
+        "max_score": 10.0,
+        "rationale": "Inference execution failed: llama.cpp server is not running. Please start it first.",
+        "duration_ms": 0.0
+      }
+    ],
+    "composite_score": 0.0,
+    "max_score": 10.0,
+    "human_rating": 9.0,
+    "human_feedback": "Test human validation review",
+    "hardware": {
+      "cpu": "Intel64 Family 6 Model 60 Stepping 3, GenuineIntel",
+      "ram_total_gb": 15.96,
+      "gpu": "N/A",
+      "os": "Windows 10"
+    },
+    "human_evaluator": "AutomatedTest"
+  },
+  {
+    "id": "eval_71ff184e",
+    "timestamp": "2026-11-19 22:34:58",
+    "model": "llama3.2:1b",
+    "model_id": "ollama_llama3_2_1b",
+    "runtime": "ollama",
+    "tasks": [
+      {
+        "task_id": "instruction_following",
+        "task_name": "Instruction Following & Output Constraints",
+        "prompt": "List exactly 3 advantages of quantized models over full-precision models. Number each item 1 to 3 with no introductory or concluding text.",
+        "response": "1. Reduced computational complexity\n2. Improved accuracy in high-dimensional data\n3. Enhanced interpretability through quantization",
+        "score": 10.0,
+        "max_score": 10.0,
+        "rationale": "Exactly 3 numbered items provided as instructed.",
+        "duration_ms": 15684.1
+      },
+      {
+        "task_id": "factual_qa",
+        "task_name": "Factual Retrieval & Precision",
+        "prompt": "What is the standard memory bus width in bits of a dual-channel DDR4 memory architecture? State the number and a brief one-sentence reason.",
+        "response": "The standard memory bus width in bits of a dual-channel DDR4 memory architecture is 128 bits.",
+        "score": 10.0,
+        "max_score": 10.0,
+        "rationale": "Correct factual retrieval (128-bit dual channel / 64-bit per channel).",
+        "duration_ms": 4534.2
+      },
+      {
+        "task_id": "summarization",
+        "task_name": "Technical Summarization",
+        "prompt": "Summarize this paragraph in exactly one sentence: 'Quantization reduces the precision of model weights from 16-bit floating point to lower-bit representations like 4-bit integers. This drastically lowers RAM and VRAM footprint and allows larger models to execute on constrained consumer hardware with minimal degradation in perplexity.'",
+        "response": "Quantization reduces the precision of model weights from 16-bit floating point to lower-bit representations, such as 4-bit integers, which significantly reduces memory requirements and allows models to run on constrained hardware.",
+        "score": 10.0,
+        "max_score": 10.0,
+        "rationale": "Clear one-sentence summary capturing core compression concept.",
+        "duration_ms": 6481.9
+      },
+      {
+        "task_id": "reasoning",
+        "task_name": "Mathematical & Memory Reasoning",
+        "prompt": "If a 4-bit quantized model requires 4 GB of weights in RAM and a 2048-token KV cache requires 512 MB, what is the total minimum RAM in GB needed to hold both? Show the calculation and final number.",
+        "response": "To find the total minimum RAM needed, we need to calculate the RAM required for the weights and the cache separately, and then add them together.\n\nFor the weights, we know that a 4-bit quantized model requires 4 GB of weights in RAM. Since each bit can have 2 values (0 or 1), the total number of possible weights is 2^4 = 16. Therefore, the RAM required for the weights is 16 GB.\n\nFor the cache, we know that a 2048-token KV cache requires 512 MB. Since each token can have 2",
+        "score": 6.0,
+        "max_score": 10.0,
+        "rationale": "Identified values but did not correctly sum to 4.5 GB.",
+        "duration_ms": 12519.4
+      },
+      {
+        "task_id": "code_generation",
+        "task_name": "Python Function Generation",
+        "prompt": "Write a concise Python function `calculate_throughput(tokens, duration_sec)` that returns tokens divided by duration, safely returning 0.0 if duration_sec is 0 or negative.",
+        "response": "### Calculate Throughput Function\n\nHere's a concise Python function that calculates the throughput of tokens divided by a given duration:\n\n```python\ndef calculate_throughput(tokens, duration_sec):\n    \"\"\"\n    Calculate the throughput of tokens divided by a given duration.\n\n    Args:\n        tokens (int): The number of tokens.\n        duration_sec (int): The duration in seconds.\n\n    Returns:\n        float: The throughput of tokens divided by the duration, or 0.0 if duration is 0 or negative.\n    \"\"\"\n    if duration_sec <= 0:\n        return 0.0\n    return tokens / duration_sec\n```\n\n### Example Use Cases\n\n```python\n# Example 1: Calculate throughput with positive duration\nprint(calculate_throughput(100, 10))  # Output: 10.0\n\n# Example 2: Calculate throughput with negative duration\nprint(c",
+        "score": 10.0,
+        "max_score": 10.0,
+        "rationale": "Clean Python function with safe zero/negative division handling.",
+        "duration_ms": 17652.2
+      },
+      {
+        "task_id": "structured_json",
+        "task_name": "Structured JSON Extraction",
+        "prompt": "Extract the hardware specifications from this sentence into a valid JSON object with keys 'cpu_cores' (int) and 'ram_gb' (int): 'This system has an 8-core processor and 16GB of DDR4 memory.' Respond with valid JSON only.",
+        "response": "```json\n{\n  \"cpu_cores\": 8,\n  \"ram_gb\": 16\n}\n```",
+        "score": 10.0,
+        "max_score": 10.0,
+        "rationale": "Valid JSON with exact required keys: {'cpu_cores': 8, 'ram_gb': 16}",
+        "duration_ms": 5346.8
+      }
+    ],
+    "composite_score": 9.3,
+    "max_score": 10.0,
+    "human_rating": null,
+    "human_feedback": null,
+    "hardware": {
+      "cpu": "Intel64 Family 6 Model 60 Stepping 3, GenuineIntel",
+      "ram_total_gb": 15.96,
+      "gpu": "N/A",
+      "os": "Windows 10"
+    }
+  },
+  {
+    "id": "eval_2fd4e587",
+    "timestamp": "2026-11-19 22:33:32",
+    "model": "qwen3_5-4b-q4_k_m",
+    "model_id": "qwen3_5-4b-q4_k_m",
+    "runtime": "llama.cpp server",
+    "tasks": [
+      {
+        "task_id": "instruction_following",
+        "task_name": "Instruction Following & Output Constraints",
+        "prompt": "List exactly 3 advantages of quantized models over full-precision models. Number each item 1 to 3 with no introductory or concluding text.",
+        "response": "Evaluation error: llama.cpp server is not running. Please start it first.",
+        "score": 0.0,
+        "max_score": 10.0,
+        "rationale": "Inference execution failed: llama.cpp server is not running. Please start it first.",
+        "duration_ms": 0.0
+      },
+      {
+        "task_id": "factual_qa",
+        "task_name": "Factual Retrieval & Precision",
+        "prompt": "What is the standard memory bus width in bits of a dual-channel DDR4 memory architecture? State the number and a brief one-sentence reason.",
+        "response": "Evaluation error: llama.cpp server is not running. Please start it first.",
+        "score": 0.0,
+        "max_score": 10.0,
+        "rationale": "Inference execution failed: llama.cpp server is not running. Please start it first.",
+        "duration_ms": 0.0
+      },
+      {
+        "task_id": "summarization",
+        "task_name": "Technical Summarization",
+        "prompt": "Summarize this paragraph in exactly one sentence: 'Quantization reduces the precision of model weights from 16-bit floating point to lower-bit representations like 4-bit integers. This drastically lowers RAM and VRAM footprint and allows larger models to execute on constrained consumer hardware with minimal degradation in perplexity.'",
+        "response": "Evaluation error: llama.cpp server is not running. Please start it first.",
+        "score": 0.0,
+        "max_score": 10.0,
+        "rationale": "Inference execution failed: llama.cpp server is not running. Please start it first.",
+        "duration_ms": 0.0
+      },
+      {
+        "task_id": "reasoning",
+        "task_name": "Mathematical & Memory Reasoning",
+        "prompt": "If a 4-bit quantized model requires 4 GB of weights in RAM and a 2048-token KV cache requires 512 MB, what is the total minimum RAM in GB needed to hold both? Show the calculation and final number.",
+        "response": "Evaluation error: llama.cpp server is not running. Please start it first.",
+        "score": 0.0,
+        "max_score": 10.0,
+        "rationale": "Inference execution failed: llama.cpp server is not running. Please start it first.",
+        "duration_ms": 0.0
+      },
+      {
+        "task_id": "code_generation",
+        "task_name": "Python Function Generation",
+        "prompt": "Write a concise Python function `calculate_throughput(tokens, duration_sec)` that returns tokens divided by duration, safely returning 0.0 if duration_sec is 0 or negative.",
+        "response": "Evaluation error: llama.cpp server is not running. Please start it first.",
+        "score": 0.0,
+        "max_score": 10.0,
+        "rationale": "Inference execution failed: llama.cpp server is not running. Please start it first.",
+        "duration_ms": 0.0
+      },
+      {
+        "task_id": "structured_json",
+        "task_name": "Structured JSON Extraction",
+        "prompt": "Extract the hardware specifications from this sentence into a valid JSON object with keys 'cpu_cores' (int) and 'ram_gb' (int): 'This system has an 8-core processor and 16GB of DDR4 memory.' Respond with valid JSON only.",
+        "response": "Evaluation error: llama.cpp server is not running. Please start it first.",
+        "score": 0.0,
+        "max_score": 10.0,
+        "rationale": "Inference execution failed: llama.cpp server is not running. Please start it first.",
+        "duration_ms": 0.0
+      }
+    ],
+    "composite_score": 0.0,
+    "max_score": 10.0,
+    "human_rating": null,
+    "human_feedback": null,
+    "hardware": {
+      "cpu": "Intel64 Family 6 Model 60 Stepping 3, GenuineIntel",
+      "ram_total_gb": 15.96,
+      "gpu": "N/A",
+      "os": "Windows 10"
+    }
+  },
+  {
+    "id": "eval_a94d8d51",
+    "timestamp": "2026-11-19 22:20:24",
+    "model": "default",
+    "model_id": "default",
+    "runtime": "default",
+    "tasks": [
+      {
+        "task_id": "instruction_following",
+        "task_name": "Instruction Following & Output Constraints",
+        "prompt": "List exactly 3 advantages of quantized models over full-precision models. Number each item 1 to 3 with no introductory or concluding text.",
+        "response": "Evaluation error: llama.cpp server is not running. Please start it first.",
+        "score": 0.0,
+        "max_score": 10.0,
+        "rationale": "Inference execution failed: llama.cpp server is not running. Please start it first.",
+        "duration_ms": 0.0
+      }
+    ],
+    "composite_score": 0.0,
+    "max_score": 10.0,
+    "human_rating": 8.0,
+    "human_feedback": "Test human validation review",
+    "hardware": {
+      "cpu": "Intel64 Family 6 Model 60 Stepping 3, GenuineIntel",
+      "ram_total_gb": 15.96,
+      "gpu": "N/A",
+      "os": "Windows 10"
+    },
+    "human_evaluator": "User"
+  },
+  {
+    "id": "eval_f9eff82e",
+    "timestamp": "2026-11-19 22:17:47",
+    "model": "default",
+    "model_id": "default",
+    "runtime": "default",
+    "tasks": [
+      {
+        "task_id": "instruction_following",
+        "task_name": "Instruction Following & Output Constraints",
+        "prompt": "List exactly 3 advantages of quantized models over full-precision models. Number each item 1 to 3 with no introductory or concluding text.",
+        "response": "Evaluation error: llama.cpp server is not running. Please start it first.",
+        "score": 0.0,
+        "max_score": 10.0,
+        "rationale": "Inference execution failed: llama.cpp server is not running. Please start it first.",
+        "duration_ms": 0.0
+      }
+    ],
+    "composite_score": 0.0,
+    "max_score": 10.0,
+    "human_rating": 9.0,
+    "human_feedback": "Test human validation review",
+    "hardware": {
+      "cpu": "Intel64 Family 6 Model 60 Stepping 3, GenuineIntel",
+      "ram_total_gb": 15.96,
+      "gpu": "N/A",
+      "os": "Windows 10"
+    },
+    "human_evaluator": "AutomatedTest"
+  },
+  {
+    "id": "eval_a6bf347e",
+    "timestamp": "2026-11-19 21:58:45",
+    "model": "default",
+    "model_id": "default",
+    "runtime": "default",
+    "tasks": [
+      {
+        "task_id": "instruction_following",
+        "task_name": "Instruction Following & Output Constraints",
+        "prompt": "List exactly 3 advantages of quantized models over full-precision models. Number each item 1 to 3 with no introductory or concluding text.",
+        "response": "Evaluation error: llama.cpp server is not running. Please start it first.",
+        "score": 0.0,
+        "max_score": 10.0,
+        "rationale": "Inference execution failed: llama.cpp server is not running. Please start it first.",
+        "duration_ms": 0.0
+      }
+    ],
+    "composite_score": 0.0,
+    "max_score": 10.0,
+    "human_rating": 9.0,
+    "human_feedback": "Test human validation review",
+    "hardware": {
+      "cpu": "Intel64 Family 6 Model 60 Stepping 3, GenuineIntel",
+      "ram_total_gb": 15.96,
+      "gpu": "N/A",
+      "os": "Windows 10"
+    },
+    "human_evaluator": "AutomatedTest"
+  },
+  {
+    "id": "eval_40e8a1c4",
+    "timestamp": "2026-11-19 21:06:44",
+    "model": "llama3.2:1b",
+    "model_id": "llama3.2:1b",
+    "runtime": "ollama",
+    "tasks": [
+      {
+        "task_id": "factual_qa",
+        "task_name": "Factual Retrieval & Precision",
+        "prompt": "What is the standard memory bus width in bits of a dual-channel DDR4 memory architecture? State the number and a brief one-sentence reason.",
+        "response": "The standard memory bus width in bits of a dual-channel DDR4 memory architecture is 128 bits.",
+        "score": 10.0,
+        "max_score": 10.0,
+        "rationale": "Correct factual retrieval (128-bit dual channel / 64-bit per channel).",
+        "duration_ms": 6131.2
+      },
+      {
+        "task_id": "reasoning",
+        "task_name": "Mathematical & Memory Reasoning",
+        "prompt": "If a 4-bit quantized model requires 4 GB of weights in RAM and a 2048-token KV cache requires 512 MB, what is the total minimum RAM in GB needed to hold both? Show the calculation and final number.",
+        "response": "To find the total minimum RAM needed, we need to calculate the RAM required for the weights and the cache separately, and then add them together.\n\nFor the weights, we know that a 4-bit quantized model requires 4 GB of weights in RAM. Since each bit can have 2 values (0 or 1), the total number of possible weights is 2^4 = 16. Therefore, the RAM required for the weights is 16 GB.\n\nFor the cache, we know that a 2048-token KV cache requires 512 MB. Since each token can have 2",
+        "score": 6.0,
+        "max_score": 10.0,
+        "rationale": "Identified values but did not correctly sum to 4.5 GB.",
+        "duration_ms": 13489.2
+      }
+    ],
+    "composite_score": 8.0,
+    "max_score": 10.0,
+    "human_rating": null,
+    "human_feedback": null,
+    "hardware": {
+      "cpu": "Intel64 Family 6 Model 60 Stepping 3, GenuineIntel",
+      "ram_total_gb": 15.96,
+      "gpu": "N/A",
+      "os": "Windows 10"
+    }
+  },
+  {
+    "id": "eval_5cd79785",
+    "timestamp": "2026-11-19 21:04:05",
+    "model": "default",
+    "model_id": "default",
+    "runtime": "default",
+    "tasks": [
+      {
+        "task_id": "instruction_following",
+        "task_name": "Instruction Following & Output Constraints",
+        "prompt": "List exactly 3 advantages of quantized models over full-precision models. Number each item 1 to 3 with no introductory or concluding text.",
+        "response": "Evaluation error: llama.cpp server is not running. Please start it first.",
+        "score": 0.0,
+        "max_score": 10.0,
+        "rationale": "Inference execution failed: llama.cpp server is not running. Please start it first.",
+        "duration_ms": 0.0
+      }
+    ],
+    "composite_score": 0.0,
+    "max_score": 10.0,
+    "human_rating": 9.0,
+    "human_feedback": "Test human validation review",
+    "hardware": {
+      "cpu": "Intel64 Family 6 Model 60 Stepping 3, GenuineIntel",
+      "ram_total_gb": 15.96,
+      "gpu": "N/A",
+      "os": "Windows 10"
+    },
+    "human_evaluator": "AutomatedTest"
+  },
+  {
+    "id": "eval_93308a80",
+    "timestamp": "2026-11-19 21:02:13",
+    "model": "default",
+    "model_id": "default",
+    "runtime": "default",
+    "tasks": [
+      {
+        "task_id": "instruction_following",
+        "task_name": "Instruction Following & Output Constraints",
+        "prompt": "List exactly 3 advantages of quantized models over full-precision models. Number each item 1 to 3 with no introductory or concluding text.",
+        "response": "Evaluation error: llama.cpp server is not running. Please start it first.",
+        "score": 0.0,
+        "max_score": 10.0,
+        "rationale": "Inference execution failed: llama.cpp server is not running. Please start it first.",
+        "duration_ms": 0.0
+      }
+    ],
+    "composite_score": 0.0,
+    "max_score": 10.0,
+    "human_rating": 9.0,
+    "human_feedback": "Test human validation review",
+    "hardware": {
+      "cpu": "Intel64 Family 6 Model 60 Stepping 3, GenuineIntel",
+      "ram_total_gb": 15.96,
+      "gpu": "N/A",
+      "os": "Windows 10"
+    },
+    "human_evaluator": "AutomatedTest"
+  },
+  {
+    "id": "eval_7fb7c471",
+    "timestamp": "2026-11-19 20:59:45",
+    "model": "default",
+    "model_id": "default",
+    "runtime": "default",
+    "tasks": [
+      {
+        "task_id": "instruction_following",
+        "task_name": "Instruction Following & Output Constraints",
+        "prompt": "List exactly 3 advantages of quantized models over full-precision models. Number each item 1 to 3 with no introductory or concluding text.",
+        "response": "Evaluation error: llama.cpp server is not running. Please start it first.",
+        "score": 0.0,
+        "max_score": 10.0,
+        "rationale": "Inference execution failed: llama.cpp server is not running. Please start it first.",
+        "duration_ms": 0.0
+      }
+    ],
+    "composite_score": 0.0,
+    "max_score": 10.0,
+    "human_rating": 9.0,
+    "human_feedback": "Test human validation review",
+    "hardware": {
+      "cpu": "Intel64 Family 6 Model 60 Stepping 3, GenuineIntel",
+      "ram_total_gb": 15.96,
+      "gpu": "N/A",
+      "os": "Windows 10"
+    },
+    "human_evaluator": "AutomatedTest"
+  }
+]
