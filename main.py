@@ -1,4 +1,5 @@
 import datetime
+import hmac
 import json
 import logging
 import os
@@ -14,7 +15,7 @@ from typing import Any, Dict, List, Optional, Union
 
 import httpx
 import psutil
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -111,40 +112,102 @@ from engine import (
     run_single_inference,
     execute_benchmark_run,
     execute_quality_evaluation,
+    is_hosted_environment,
+    get_deployment_info,
+    is_remote_access_allowed,
+    get_configured_api_key,
 )
 
 server_start_time = time.time()
 
 
-def verify_api_access(request: Request):
+def extract_client_api_key(request: Request) -> Optional[str]:
+    """Extracts client API key from headers or query parameters."""
+    key = request.headers.get("X-API-Key")
+    if key:
+        return key.strip()
+    auth = request.headers.get("Authorization")
+    if auth and auth.startswith("Bearer "):
+        return auth[7:].strip()
+    token = request.headers.get("X-Auth-Token")
+    if token:
+        return token.strip()
+    if "api_key" in request.query_params:
+        return request.query_params["api_key"].strip()
+    return None
+
+
+def verify_public_access(request: Request):
+    """
+    Public read-only dashboard & telemetry endpoints.
+    Allows access from local or remote users without requiring a private API key.
+    If the engine is explicitly running in strict local-only offline mode
+    (not hosted, ALLOW_REMOTE_ACCESS=false, and sec.allow_remote_access=false),
+    blocks external LAN IPs with 403.
+    """
     client_ip = request.client.host if request.client else "127.0.0.1"
     is_local = client_ip in ("127.0.0.1", "::1", "localhost", "testclient")
+    cfg = load_config()
 
+    if not is_remote_access_allowed(cfg.security, is_local):
+        raise HTTPException(
+            status_code=403,
+            detail="Remote network access to this inference engine is disabled. Enable remote access in Settings or set ALLOW_REMOTE_ACCESS=true.",
+        )
+    return True
+
+
+def verify_sensitive_access(request: Request):
+    """
+    Protects sensitive operations:
+    - Model management & downloads
+    - Configuration modifications
+    - Inference execution and runtime subprocess control
+    - Benchmark runs and diagnostic log inspection
+    """
+    client_ip = request.client.host if request.client else "127.0.0.1"
+    is_local = client_ip in ("127.0.0.1", "::1", "localhost", "testclient")
     cfg = load_config()
     sec = cfg.security
 
-    if not is_local:
-        if not sec.allow_remote_access:
-            raise HTTPException(
-                status_code=403,
-                detail="Remote network access to this inference engine is disabled. Enable remote access in Settings.",
-            )
+    if not is_remote_access_allowed(sec, is_local):
+        raise HTTPException(
+            status_code=403,
+            detail="Remote network access to this inference engine is disabled. Enable remote access in Settings.",
+        )
 
-    auth_header = request.headers.get("Authorization")
-    api_key_header = request.headers.get("X-API-Key")
-    provided_key = None
-    if api_key_header:
-        provided_key = api_key_header.strip()
-    elif auth_header and auth_header.startswith("Bearer "):
-        provided_key = auth_header[7:].strip()
+    configured_key = get_configured_api_key(sec)
+    provided_key = extract_client_api_key(request)
 
-    if sec.api_key:
+    # If an API key is configured (via ENV or config.json), enforce it for remote users
+    # and for local users if require_auth_for_local is enabled
+    if configured_key:
         if (not is_local) or sec.require_auth_for_local:
-            if not provided_key or provided_key != sec.api_key:
+            if not provided_key or not hmac.compare_digest(provided_key, configured_key):
                 raise HTTPException(
                     status_code=401,
-                    detail="Unauthorized: Missing or invalid API key.",
+                    detail="Unauthorized: Valid API key required for sensitive operations. Provide 'X-API-Key' or 'Authorization: Bearer <key>'.",
                 )
+        return True
+
+    # If NO API key is configured:
+    # Local developer machine -> allow without key
+    if is_local:
+        return True
+
+    # Remote caller without API key configured:
+    require_key_env = os.environ.get("REQUIRE_API_KEY_FOR_MUTATIONS", "").strip().lower() in ("true", "1")
+    if require_key_env:
+        raise HTTPException(
+            status_code=401,
+            detail="API key required for remote management and inference operations on this hosted instance. Set API_KEY environment variable.",
+        )
+
+    return True
+
+
+# Backward compatibility alias
+verify_api_access = verify_sensitive_access
 
 
 app = FastAPI(
@@ -187,28 +250,30 @@ def get_health():
 
     models = {m.id: m for m in load_models_catalog()}
     active_m = models.get(cfg.active_model_id)
+    deployment = get_deployment_info()
 
     return {
         "status": "healthy",
         "version": "1.0.0",
+        "deployment": deployment,
         "os": f"{platform.system()} {platform.release()} ({platform.machine()})",
         "uptime_sec": round(time.time() - server_start_time, 1),
         "active_runtime": cfg.active_runtime,
         "runtime_connected": runtime_conn,
         "active_model": active_m.name if active_m else "None",
         "security": {
-            "remote_access_enabled": cfg.security.allow_remote_access,
-            "auth_required": bool(cfg.security.api_key),
+            "remote_access_enabled": is_remote_access_allowed(cfg.security, False),
+            "auth_required": bool(get_configured_api_key(cfg.security)),
         },
     }
 
 
-@app.get("/api/v1/hardware", dependencies=[Depends(verify_api_access)])
+@app.get("/api/v1/hardware", dependencies=[Depends(verify_public_access)])
 def get_hardware():
     return HardwareDetector.get_full_hardware_profile()
 
 
-@app.get("/api/v1/runtimes", dependencies=[Depends(verify_api_access)])
+@app.get("/api/v1/runtimes", dependencies=[Depends(verify_public_access)])
 def get_runtimes():
     cfg = load_config()
     llama_exe_str = cfg.llama_cpp.executable_path or find_system_llama_server()
@@ -241,13 +306,13 @@ def get_runtimes():
     }
 
 
-@app.get("/api/v1/runtimes/{runtime_id}/status", dependencies=[Depends(verify_api_access)])
+@app.get("/api/v1/runtimes/{runtime_id}/status", dependencies=[Depends(verify_public_access)])
 def get_single_runtime_status(runtime_id: str):
     return runtime_registry.get_status(runtime_id)
 
 
-@app.get("/api/v1/runtime/status", dependencies=[Depends(verify_api_access)])
-@app.get("/api/v1/runtimes/status", dependencies=[Depends(verify_api_access)])
+@app.get("/api/v1/runtime/status", dependencies=[Depends(verify_public_access)])
+@app.get("/api/v1/runtimes/status", dependencies=[Depends(verify_public_access)])
 def get_runtime_status():
     cfg = load_config()
     adapter = runtime_registry.get(cfg.active_runtime)
@@ -262,7 +327,7 @@ def get_runtime_status():
     }
 
 
-@app.post("/api/v1/runtimes/switch", dependencies=[Depends(verify_api_access)])
+@app.post("/api/v1/runtimes/switch", dependencies=[Depends(verify_sensitive_access)])
 def switch_runtime(req: SwitchRuntimeRequest):
     valid = [a["runtime_id"] for a in runtime_registry.list_all()]
     if req.runtime not in valid:
@@ -286,7 +351,7 @@ def switch_runtime(req: SwitchRuntimeRequest):
     return {"status": "ok", "active_runtime": cfg.active_runtime}
 
 
-@app.post("/api/v1/runtimes/llama/start", dependencies=[Depends(verify_api_access)])
+@app.post("/api/v1/runtimes/llama/start", dependencies=[Depends(verify_sensitive_access)])
 def start_llama_server(req: StartLlamaServerRequest):
     cfg = load_config()
     models = {m.id: m for m in load_models_catalog()}
@@ -351,12 +416,12 @@ def start_llama_server(req: StartLlamaServerRequest):
     return res
 
 
-@app.post("/api/v1/runtimes/llama/stop", dependencies=[Depends(verify_api_access)])
+@app.post("/api/v1/runtimes/llama/stop", dependencies=[Depends(verify_sensitive_access)])
 def stop_llama_server():
     return llama_manager.stop()
 
 
-@app.post("/api/v1/runtimes/start", dependencies=[Depends(verify_api_access)])
+@app.post("/api/v1/runtimes/start", dependencies=[Depends(verify_sensitive_access)])
 def start_active_runtime(req: Optional[StartLlamaServerRequest] = None):
     cfg = load_config()
     models = {m.id: m for m in load_models_catalog()}
@@ -385,7 +450,7 @@ def start_active_runtime(req: Optional[StartLlamaServerRequest] = None):
         return start_llama_server(req)
 
 
-@app.post("/api/v1/runtimes/stop", dependencies=[Depends(verify_api_access)])
+@app.post("/api/v1/runtimes/stop", dependencies=[Depends(verify_sensitive_access)])
 def stop_active_runtime():
     cfg = load_config()
     if cfg.active_runtime == "ollama":
@@ -399,7 +464,7 @@ def stop_active_runtime():
         return llama_manager.stop()
 
 
-@app.get("/api/v1/models", dependencies=[Depends(verify_api_access)])
+@app.get("/api/v1/models", dependencies=[Depends(verify_public_access)])
 def get_models():
     cfg = load_config()
     models = scan_and_update_models(refresh_only=True)
@@ -412,7 +477,7 @@ def get_models():
     }
 
 
-@app.post("/api/v1/models/scan", dependencies=[Depends(verify_api_access)])
+@app.post("/api/v1/models/scan", dependencies=[Depends(verify_sensitive_access)])
 def scan_models():
     models = scan_and_update_models(refresh_only=False)
     return {
@@ -423,7 +488,7 @@ def scan_models():
     }
 
 
-@app.post("/api/v1/models/refresh", dependencies=[Depends(verify_api_access)])
+@app.post("/api/v1/models/refresh", dependencies=[Depends(verify_sensitive_access)])
 def refresh_models():
     models = scan_and_update_models(refresh_only=True)
     return {
@@ -434,7 +499,7 @@ def refresh_models():
     }
 
 
-@app.post("/api/v1/models/select", dependencies=[Depends(verify_api_access)])
+@app.post("/api/v1/models/select", dependencies=[Depends(verify_sensitive_access)])
 def select_model(req: SelectModelRequest):
     models = {m.id: m for m in load_models_catalog()}
     target_id = req.model_id
@@ -459,7 +524,7 @@ def select_model(req: SelectModelRequest):
     }
 
 
-@app.post("/api/v1/models/add", dependencies=[Depends(verify_api_access)])
+@app.post("/api/v1/models/add", dependencies=[Depends(verify_sensitive_access)])
 def add_model(req: AddModelRequest):
     raw_path = str(req.path).strip()
     clean_path = raw_path.strip('\'"').strip()
@@ -563,13 +628,13 @@ def add_model(req: AddModelRequest):
     return {"status": "ok", "model": entry.model_dump()}
 
 
-@app.get("/api/v1/models/directories", dependencies=[Depends(verify_api_access)])
+@app.get("/api/v1/models/directories", dependencies=[Depends(verify_public_access)])
 def get_model_directories():
     cfg = load_config()
     return {"status": "ok", "directories": cfg.model_directories}
 
 
-@app.post("/api/v1/models/directories", dependencies=[Depends(verify_api_access)])
+@app.post("/api/v1/models/directories", dependencies=[Depends(verify_sensitive_access)])
 def add_model_directory(req: DirectoryRequest):
     p = Path(req.directory_path)
     if not p.is_absolute():
@@ -594,7 +659,7 @@ def add_model_directory(req: DirectoryRequest):
     }
 
 
-@app.delete("/api/v1/models/directories", dependencies=[Depends(verify_api_access)])
+@app.delete("/api/v1/models/directories", dependencies=[Depends(verify_sensitive_access)])
 def remove_model_directory(req: DirectoryRequest):
     dir_str = str(req.directory_path).strip()
     cfg = load_config()
@@ -606,7 +671,7 @@ def remove_model_directory(req: DirectoryRequest):
     return {"status": "ok", "directories": cfg.model_directories}
 
 
-@app.get("/api/v1/models/{model_id:path}", dependencies=[Depends(verify_api_access)])
+@app.get("/api/v1/models/{model_id:path}", dependencies=[Depends(verify_public_access)])
 def get_single_model(model_id: str):
     model_id = urllib.parse.unquote(model_id)
     catalog = {m.id: m for m in load_models_catalog()}
@@ -630,7 +695,7 @@ def get_single_model(model_id: str):
     }
 
 
-@app.post("/api/v1/models/download", dependencies=[Depends(verify_api_access)])
+@app.post("/api/v1/models/download", dependencies=[Depends(verify_sensitive_access)])
 def download_model(req: ModelDownloadRequest):
     if not req.license_confirmed:
         raise HTTPException(status_code=400, detail="Explicit user license confirmation is required before downloading model weights.")
@@ -655,7 +720,7 @@ def download_model(req: ModelDownloadRequest):
     }
 
 
-@app.delete("/api/v1/models/{model_id:path}", dependencies=[Depends(verify_api_access)])
+@app.delete("/api/v1/models/{model_id:path}", dependencies=[Depends(verify_sensitive_access)])
 def remove_model(model_id: str):
     model_id = urllib.parse.unquote(model_id)
     catalog = {m.id: m for m in load_models_catalog()}
@@ -688,23 +753,52 @@ def remove_model(model_id: str):
     return {"status": "ok", "message": f"Model '{target_id}' removed from registry cache without deleting file on disk"}
 
 
-@app.get("/api/v1/config", dependencies=[Depends(verify_api_access)])
-def get_engine_config():
-    return load_config().model_dump()
+@app.get("/api/v1/config", dependencies=[Depends(verify_public_access)])
+def get_engine_config(request: Request):
+    cfg = load_config()
+    client_ip = request.client.host if request.client else "127.0.0.1"
+    is_local = client_ip in ("127.0.0.1", "::1", "localhost", "testclient")
+
+    configured_key = get_configured_api_key(cfg.security)
+    provided_key = extract_client_api_key(request)
+    is_authenticated = bool(configured_key and provided_key and hmac.compare_digest(provided_key, configured_key))
+
+    data = cfg.model_dump()
+    data["deployment"] = get_deployment_info()
+
+    # Never expose raw API key to unauthenticated remote visitors
+    data["security"]["api_key_configured"] = bool(configured_key)
+    if not is_local and not is_authenticated:
+        data["security"]["api_key"] = None
+
+    return data
 
 
-@app.put("/api/v1/config", dependencies=[Depends(verify_api_access)])
-@app.post("/api/v1/config", dependencies=[Depends(verify_api_access)])
+@app.put("/api/v1/config", dependencies=[Depends(verify_sensitive_access)])
+@app.post("/api/v1/config", dependencies=[Depends(verify_sensitive_access)])
 def update_engine_config(config_data: Dict[str, Any]):
     try:
+        # If API key field was sent as None or masked, retain existing key
+        cur_cfg = load_config()
+        if "security" in config_data:
+            sec_in = config_data["security"]
+            if sec_in.get("api_key") is None and cur_cfg.security.api_key:
+                sec_in["api_key"] = cur_cfg.security.api_key
+
         updated = EngineConfig(**config_data)
+        if updated.active_model_id:
+            models = {m.id: m for m in load_models_catalog()}
+            active_m = models.get(updated.active_model_id)
+            if active_m:
+                updated.active_runtime = resolve_compatible_runtime(active_m, updated.active_runtime)
+
         save_config(updated)
         return {"status": "ok", "config": updated.model_dump()}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid configuration format: {e}")
 
 
-@app.post("/api/v1/config/recommend", dependencies=[Depends(verify_api_access)])
+@app.post("/api/v1/config/recommend", dependencies=[Depends(verify_public_access)])
 def recommend_config(req: RecommendationRequest):
     cfg = load_config()
     model_id = req.model_id or cfg.active_model_id
@@ -714,7 +808,7 @@ def recommend_config(req: RecommendationRequest):
     return RecommendationEngine.recommend(target_model, context_len=ctx)
 
 
-@app.post("/api/v1/config/validate", dependencies=[Depends(verify_api_access)])
+@app.post("/api/v1/config/validate", dependencies=[Depends(verify_sensitive_access)])
 def validate_engine_config(req: ConfigValidateRequest):
     cfg = load_config()
     model_id = req.model_id or cfg.active_model_id
@@ -745,8 +839,8 @@ def validate_engine_config(req: ConfigValidateRequest):
     }
 
 
-@app.get("/api/v1/metrics", dependencies=[Depends(verify_api_access)])
-@app.get("/api/v1/metrics/live", dependencies=[Depends(verify_api_access)])
+@app.get("/api/v1/metrics", dependencies=[Depends(verify_public_access)])
+@app.get("/api/v1/metrics/live", dependencies=[Depends(verify_public_access)])
 def get_live_metrics():
     hw = HardwareDetector.get_full_hardware_profile()
     telem = telemetry.get_snapshot()
@@ -775,17 +869,17 @@ def get_live_metrics():
     }
 
 
-@app.get("/api/v1/diagnostics", dependencies=[Depends(verify_api_access)])
+@app.get("/api/v1/diagnostics", dependencies=[Depends(verify_public_access)])
 def get_diagnostics():
     return run_diagnostics_suite()
 
 
-@app.get("/api/v1/benchmark/summary", dependencies=[Depends(verify_api_access)])
+@app.get("/api/v1/benchmark/summary", dependencies=[Depends(verify_public_access)])
 def get_benchmarks():
     return read_historical_benchmarks()
 
 
-@app.get("/api/v1/logs/llama", dependencies=[Depends(verify_api_access)])
+@app.get("/api/v1/logs/llama", dependencies=[Depends(verify_sensitive_access)])
 def get_llama_logs(lines: int = 100):
     if not LLAMA_LOG_FILE.is_file():
         return {"logs": "No llama server log found."}
@@ -798,7 +892,7 @@ def get_llama_logs(lines: int = 100):
         return {"logs": f"Error reading log file: {e}"}
 
 
-@app.get("/api/v1/logs/app", dependencies=[Depends(verify_api_access)])
+@app.get("/api/v1/logs/app", dependencies=[Depends(verify_sensitive_access)])
 def get_app_logs(lines: int = 100):
     if not APP_LOG_FILE.is_file():
         return {"logs": "No app log found."}
@@ -811,7 +905,7 @@ def get_app_logs(lines: int = 100):
         return {"logs": f"Error reading log file: {e}"}
 
 
-@app.post("/api/v1/inference/generate", dependencies=[Depends(verify_api_access)])
+@app.post("/api/v1/inference/generate", dependencies=[Depends(verify_sensitive_access)])
 async def project3_generate(req: InferenceGenerateRequest):
     cfg = load_config()
     catalog = {m.id: m for m in load_models_catalog()}
@@ -1056,7 +1150,8 @@ def stop_inference_generation():
     return {"status": "ok", "message": "Inference generation halted"}
 
 
-@app.post("/api/v1/chat/completions", dependencies=[Depends(verify_api_access)])
+@app.post("/v1/chat/completions", dependencies=[Depends(verify_sensitive_access)])
+@app.post("/api/v1/chat/completions", dependencies=[Depends(verify_sensitive_access)])
 async def chat_completions(req: ChatCompletionRequest):
     cfg = load_config()
     catalog = {m.id: m for m in load_models_catalog()}
@@ -1083,7 +1178,7 @@ async def chat_completions(req: ChatCompletionRequest):
     telemetry.start_generation(model_name, active_runtime)
 
     if active_runtime == "ollama":
-        target_model = req.model or (model_obj.path if model_obj and model_obj.source == "ollama_api" else (model_obj.name if model_obj else "llama3.2:1b"))
+        target_model = (model_obj.path if model_obj and model_obj.source == "ollama_api" else (model_obj.name if model_obj else req.model)) or req.model or "llama3.2:1b"
         ollama_url = f"{cfg.ollama.base_url}/api/chat"
         payload = {
             "model": target_model,
@@ -1272,7 +1367,7 @@ async def chat_completions(req: ChatCompletionRequest):
                 raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/v1/benchmarks", dependencies=[Depends(verify_api_access)])
+@app.get("/api/v1/benchmarks", dependencies=[Depends(verify_public_access)])
 def get_all_benchmarks():
     return {
         "historical": read_historical_benchmarks(),
@@ -1280,12 +1375,12 @@ def get_all_benchmarks():
     }
 
 
-@app.post("/api/v1/benchmarks", dependencies=[Depends(verify_api_access)])
+@app.post("/api/v1/benchmarks", dependencies=[Depends(verify_sensitive_access)])
 async def run_benchmark_endpoint(req: BenchmarkRunRequest):
     return await execute_benchmark_run(req)
 
 
-@app.get("/api/v1/benchmarks/{benchmark_id}", dependencies=[Depends(verify_api_access)])
+@app.get("/api/v1/benchmarks/{benchmark_id}", dependencies=[Depends(verify_public_access)])
 def get_single_benchmark(benchmark_id: str):
     benches = load_benchmarks()
     for b in benches:
@@ -1294,7 +1389,7 @@ def get_single_benchmark(benchmark_id: str):
     raise HTTPException(status_code=404, detail="Benchmark record not found")
 
 
-@app.delete("/api/v1/benchmarks/{benchmark_id}", dependencies=[Depends(verify_api_access)])
+@app.delete("/api/v1/benchmarks/{benchmark_id}", dependencies=[Depends(verify_sensitive_access)])
 def delete_single_benchmark(benchmark_id: str):
     benches = load_benchmarks()
     filtered = [b for b in benches if b.get("id") != benchmark_id]
@@ -1304,17 +1399,17 @@ def delete_single_benchmark(benchmark_id: str):
     return {"status": "deleted", "id": benchmark_id}
 
 
-@app.get("/api/v1/evaluations", dependencies=[Depends(verify_api_access)])
+@app.get("/api/v1/evaluations", dependencies=[Depends(verify_public_access)])
 def get_all_evaluations():
     return {"evaluations": load_evaluations()}
 
 
-@app.post("/api/v1/evaluations/run", dependencies=[Depends(verify_api_access)])
+@app.post("/api/v1/evaluations/run", dependencies=[Depends(verify_sensitive_access)])
 async def run_quality_evaluation_endpoint(req: QualityEvaluationRequest):
     return await execute_quality_evaluation(req)
 
 
-@app.post("/api/v1/evaluations/{eval_id}/rating", dependencies=[Depends(verify_api_access)])
+@app.post("/api/v1/evaluations/{eval_id}/rating", dependencies=[Depends(verify_sensitive_access)])
 def rate_evaluation(eval_id: str, req: QualityRatingRequest):
     evals = load_evaluations()
     for e in evals:
@@ -1331,7 +1426,7 @@ def rate_evaluation(eval_id: str, req: QualityRatingRequest):
 # AI Model Advisor & Auto Setup API Endpoints
 # ==========================================
 
-@app.get("/api/v1/advisor/hardware-summary", dependencies=[Depends(verify_api_access)])
+@app.get("/api/v1/advisor/hardware-summary", dependencies=[Depends(verify_public_access)])
 def get_advisor_hardware_summary():
     hw = HardwareDetector.get_full_hardware_profile()
     cfg = load_config()
@@ -1369,7 +1464,7 @@ def get_advisor_hardware_summary():
     }
 
 
-@app.post("/api/v1/advisor/recommendations", dependencies=[Depends(verify_api_access)])
+@app.post("/api/v1/advisor/recommendations", dependencies=[Depends(verify_public_access)])
 def get_advisor_recommendations(req: AdvisorRecommendationRequest):
     hw = HardwareDetector.get_full_hardware_profile()
     cfg = load_config()
@@ -1406,12 +1501,12 @@ def get_advisor_recommendations(req: AdvisorRecommendationRequest):
     }
 
 
-@app.post("/api/v1/advisor/setup", dependencies=[Depends(verify_api_access)])
+@app.post("/api/v1/advisor/setup", dependencies=[Depends(verify_sensitive_access)])
 def initiate_advisor_setup(req: AdvisorSetupRequest):
     return setup_manager.start_setup(req)
 
 
-@app.get("/api/v1/advisor/setup/{task_id}/progress", dependencies=[Depends(verify_api_access)])
+@app.get("/api/v1/advisor/setup/{task_id}/progress", dependencies=[Depends(verify_public_access)])
 def get_advisor_setup_progress(task_id: str):
     prog = setup_manager.get_progress(task_id)
     if not prog:
@@ -1419,12 +1514,12 @@ def get_advisor_setup_progress(task_id: str):
     return prog
 
 
-@app.post("/api/v1/advisor/setup/{task_id}/cancel", dependencies=[Depends(verify_api_access)])
+@app.post("/api/v1/advisor/setup/{task_id}/cancel", dependencies=[Depends(verify_sensitive_access)])
 def cancel_advisor_setup(task_id: str):
     return setup_manager.cancel_setup(task_id)
 
 
-@app.get("/api/v1/advisor/runtimes/install-guide/{runtime_id}", dependencies=[Depends(verify_api_access)])
+@app.get("/api/v1/advisor/runtimes/install-guide/{runtime_id}", dependencies=[Depends(verify_public_access)])
 def get_runtime_install_guide(runtime_id: str):
     clean_id = runtime_id.strip()
     if clean_id not in RUNTIME_INSTALL_GUIDES:
@@ -1449,27 +1544,74 @@ def get_runtime_install_guide(runtime_id: str):
     return {"status": "ok", "guide": guide}
 
 
-app.mount("/static", StaticFiles(directory=BASE_DIR / "frontend"), name="static")
+FRONTEND_DIST = BASE_DIR / "frontend" / "dist"
+FRONTEND_SRC = BASE_DIR / "frontend"
+
+if (FRONTEND_DIST / "assets").is_dir():
+    app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="spa_assets")
+
+if FRONTEND_DIST.is_dir():
+    app.mount("/static", StaticFiles(directory=FRONTEND_DIST), name="static")
+elif FRONTEND_SRC.is_dir():
+    app.mount("/static", StaticFiles(directory=FRONTEND_SRC), name="static")
+
+
+def get_spa_index():
+    dist_index = FRONTEND_DIST / "index.html"
+    if dist_index.is_file():
+        return FileResponse(dist_index)
+    src_index = FRONTEND_SRC / "index.html"
+    if src_index.is_file():
+        return FileResponse(src_index)
+    return Response(content="<h1>Large-Model-on-Light-Hardware Engine UI</h1>", media_type="text/html")
 
 
 @app.get("/")
+@app.head("/")
 def serve_index():
-    return FileResponse(BASE_DIR / "frontend" / "index.html")
+    return get_spa_index()
+
+
+@app.get("/favicon.ico")
+@app.head("/favicon.ico")
+def serve_favicon():
+    for fav_path in [FRONTEND_DIST / "favicon.ico", FRONTEND_SRC / "favicon.ico"]:
+        if fav_path.is_file():
+            return FileResponse(fav_path)
+    return Response(status_code=204)
 
 
 @app.get("/style.css")
-def serve_css():
-    return FileResponse(BASE_DIR / "frontend" / "style.css", media_type="text/css")
+@app.head("/style.css")
+def serve_legacy_css():
+    legacy = FRONTEND_SRC / "style.css"
+    if legacy.is_file():
+        return FileResponse(legacy, media_type="text/css")
+    return Response(content="/* Modern React Tailwind CSS loaded via Vite bundle */", media_type="text/css")
 
 
 @app.get("/script.js")
-def serve_js():
-    return FileResponse(BASE_DIR / "frontend" / "script.js", media_type="application/javascript")
+@app.head("/script.js")
+def serve_legacy_js():
+    legacy = FRONTEND_SRC / "script.js"
+    if legacy.is_file():
+        return FileResponse(legacy, media_type="application/javascript")
+    return Response(content="// Modern React SPA loaded via Vite bundle", media_type="application/javascript")
+
+
+@app.get("/{full_path:path}")
+def serve_spa_routes(full_path: str):
+    if full_path.startswith(("api/", "v1/", "docs", "openapi.json", "assets/")):
+        raise HTTPException(status_code=404, detail="Resource not found")
+    target_file = FRONTEND_DIST / full_path
+    if target_file.is_file():
+        return FileResponse(target_file)
+    return get_spa_index()
 
 
 if __name__ == "__main__":
     import uvicorn
     cfg = load_config()
-    host = cfg.security.listen_host if cfg.security.allow_remote_access else "127.0.0.1"
-    port = cfg.security.listen_port or 8000
+    port = int(os.environ.get("PORT", cfg.security.listen_port or 8000))
+    host = "0.0.0.0" if (is_hosted_environment() or cfg.security.allow_remote_access) else "127.0.0.1"
     uvicorn.run("main:app", host=host, port=port, reload=False, log_level="info")

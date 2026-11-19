@@ -25,6 +25,7 @@ from engine.config import (
     parse_gguf_metadata,
     parse_onnx_metadata,
     parse_safetensors_metadata,
+    resolve_compatible_runtime,
     save_config,
     save_models_catalog,
 )
@@ -456,7 +457,15 @@ def scan_and_update_models(refresh_only: bool = False) -> List[ModelEntry]:
     if available_models:
         if not cfg.active_model_id or cfg.active_model_id not in [m.id for m in available_models]:
             cfg.active_model_id = available_models[0].id
+            cfg.active_runtime = resolve_compatible_runtime(available_models[0], cfg.active_runtime)
             save_config(cfg)
+        else:
+            cur = next((m for m in available_models if m.id == cfg.active_model_id), None)
+            if cur:
+                reconciled = resolve_compatible_runtime(cur, cfg.active_runtime)
+                if reconciled != cfg.active_runtime:
+                    cfg.active_runtime = reconciled
+                    save_config(cfg)
     else:
         if cfg.active_model_id:
             cfg.active_model_id = ""

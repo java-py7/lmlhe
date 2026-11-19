@@ -1,5 +1,32 @@
 [
   {
+    "id": "bench_62ed0153",
+    "timestamp": "2026-11-20 01:51:25",
+    "model": "llama3.2:1b",
+    "model_id": "ollama_llama3_2_1b",
+    "runtime": "ollama",
+    "prompt": "Explain the difference between CPU cache and main memory in detail.",
+    "context_length": 2048,
+    "threads": 4,
+    "gpu_layers": 99,
+    "tokens": 128,
+    "duration_ms": 15996.1,
+    "eval_tps": 11.56,
+    "prompt_tps": 57.06,
+    "ttft_ms": 666.0,
+    "peak_ram_mb": 9897.8,
+    "peak_vram_mb": 0.0,
+    "status": "completed",
+    "notes": "Automated benchmark run",
+    "response_preview": "CPU cache and main memory are two fundamental components of a computer's memory hierarchy, each serving distinct purposes and playing a cruc...",
+    "hardware": {
+      "cpu": "Intel64 Family 6 Model 60 Stepping 3, GenuineIntel",
+      "ram_total_gb": 15.96,
+      "gpu": "N/A",
+      "os": "Windows 10"
+    }
+  },
+  {
     "id": "bench_8b8539e1",
     "timestamp": "2026-11-19 22:36:16",
     "model": "llama3.2:1b",

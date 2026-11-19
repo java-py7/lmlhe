@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 
 import psutil
 
-from engine.config import format_bytes, logger
+from engine.config import format_bytes, get_deployment_info, logger
 
 
 class SystemSampler:
@@ -301,6 +301,7 @@ class HardwareDetector:
     @classmethod
     def get_full_hardware_profile(cls) -> Dict[str, Any]:
         return {
+            "deployment": get_deployment_info(),
             "os": {
                 "system": platform.system(),
                 "release": platform.release(),

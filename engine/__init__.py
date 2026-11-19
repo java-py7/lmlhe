@@ -56,6 +56,10 @@ from engine.config import (
     parse_gguf_metadata,
     parse_safetensors_metadata,
     parse_onnx_metadata,
+    is_hosted_environment,
+    get_deployment_info,
+    is_remote_access_allowed,
+    get_configured_api_key,
 )
 
 from engine.hardware import (
@@ -165,6 +169,10 @@ __all__ = [
     "parse_gguf_metadata",
     "parse_safetensors_metadata",
     "parse_onnx_metadata",
+    "is_hosted_environment",
+    "get_deployment_info",
+    "is_remote_access_allowed",
+    "get_configured_api_key",
     # Hardware
     "SystemSampler",
     "HardwareDetector",

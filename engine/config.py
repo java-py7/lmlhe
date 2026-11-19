@@ -10,7 +10,7 @@ import logging
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 # Base Directory & Storage Paths
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -38,16 +38,102 @@ file_lock = threading.RLock()
 server_start_time = time.time()
 
 
+def is_hosted_environment() -> bool:
+    """
+    Detect whether the application is running in a hosted / production environment.
+    Recognizes Render (RENDER=true, RENDER_INSTANCE_ID, or PORT on a container runner),
+    Vercel, Fly.io, Hugging Face Spaces, or ENVIRONMENT/APP_ENV/NODE_ENV=production.
+    """
+    if os.environ.get("RENDER") or os.environ.get("RENDER_INSTANCE_ID"):
+        return True
+    if os.environ.get("PORT") and (os.environ.get("WEB_CONCURRENCY") or os.environ.get("RENDER_SERVICE_ID")):
+        return True
+    if os.environ.get("VERCEL") or os.environ.get("FLY_APP_NAME") or os.environ.get("SPACE_ID"):
+        return True
+    env = (
+        os.environ.get("ENVIRONMENT")
+        or os.environ.get("APP_ENV")
+        or os.environ.get("ENV")
+        or ""
+    ).strip().lower()
+    return env in ("production", "prod", "hosted", "staging")
+
+
+def get_deployment_info() -> Dict[str, Any]:
+    """
+    Returns structured deployment metadata distinguishing cloud-hosted environments
+    from local development workstations.
+    """
+    is_hosted = is_hosted_environment()
+    provider = "Local Machine"
+    if os.environ.get("RENDER") or os.environ.get("RENDER_INSTANCE_ID"):
+        provider = "Render Cloud"
+    elif os.environ.get("SPACE_ID"):
+        provider = "Hugging Face Spaces"
+    elif os.environ.get("FLY_APP_NAME"):
+        provider = "Fly.io"
+    elif is_hosted:
+        provider = "Cloud Container"
+
+    return {
+        "is_hosted": is_hosted,
+        "environment": "production" if is_hosted else "development",
+        "provider": provider,
+        "target_scope": "server_container" if is_hosted else "local_workstation",
+        "badge_text": f"HOSTED ({provider.upper()})" if is_hosted else "LOCAL WORKSTATION",
+        "description": "Hosted cloud container running on Render" if is_hosted else "Local developer workstation",
+        "hardware_notice": (
+            "Hardware telemetry reflects the hosted cloud backend container, not your local browser device."
+            if is_hosted
+            else "Hardware telemetry reflects your local physical machine."
+        ),
+    }
+
+
+def is_remote_access_allowed(sec: "SecuritySettings", is_local: bool) -> bool:
+    """
+    Determines whether network requests from remote clients are permitted:
+    1. Localhost requests are always permitted.
+    2. Explicit environment variable ALLOW_REMOTE_ACCESS=true/1 overrides everything.
+    3. In hosted/cloud environments (Render), remote access is permitted by default for dashboard access.
+    4. Otherwise, respects sec.allow_remote_access from storage/config.json.
+    """
+    if is_local:
+        return True
+    env_override = os.environ.get("ALLOW_REMOTE_ACCESS")
+    if env_override is not None:
+        return env_override.strip().lower() in ("true", "1", "yes")
+    if is_hosted_environment():
+        return True
+    return bool(sec.allow_remote_access)
+
+
+def get_configured_api_key(sec: "SecuritySettings") -> Optional[str]:
+    """
+    Returns the configured API key, checking environment variables first,
+    then falling back to configuration.
+    """
+    env_key = os.environ.get("API_KEY") or os.environ.get("ENGINE_API_KEY")
+    if env_key and env_key.strip():
+        return env_key.strip()
+    if sec.api_key and sec.api_key.strip():
+        return sec.api_key.strip()
+    return None
+
+
 class SecuritySettings(BaseModel):
+    model_config = ConfigDict(extra="ignore")
     api_key: Optional[str] = Field(default=None)
-    allow_remote_access: bool = Field(default=False)
+    api_key_configured: Optional[bool] = Field(default=False)
+    allow_remote_access: bool = Field(default=True)
     require_auth_for_local: bool = Field(default=False)
-    listen_host: str = Field(default="127.0.0.1")
+    listen_host: str = Field(default="0.0.0.0")
     listen_port: int = Field(default=8000)
-    allowed_origins: List[str] = Field(default_factory=lambda: ["http://127.0.0.1:8000", "http://localhost:8000"])
+    allowed_origins: List[str] = Field(default_factory=lambda: ["*"])
 
 
 class LlamaCppSettings(BaseModel):
+    model_config = ConfigDict(extra="ignore")
     executable_path: str = Field(default="")
     cli_executable_path: str = Field(default="")
     host: str = Field(default="127.0.0.1")
@@ -64,6 +150,7 @@ class LlamaCppSettings(BaseModel):
 
 
 class OllamaSettings(BaseModel):
+    model_config = ConfigDict(extra="ignore")
     host: str = Field(default="127.0.0.1")
     port: int = Field(default=11434)
     base_url: str = Field(default="http://127.0.0.1:11434")
@@ -71,6 +158,7 @@ class OllamaSettings(BaseModel):
 
 
 class EngineConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
     active_runtime: str = Field(default="llama.cpp server")
     active_model_id: str = Field(default="")
     llama_cpp: LlamaCppSettings = Field(default_factory=LlamaCppSettings)
@@ -319,6 +407,15 @@ def load_config() -> EngineConfig:
             save_config_locked(cfg)
             return cfg
 
+        # Apply hosted environment and environment variable overrides
+        if is_hosted_environment() or os.environ.get("ALLOW_REMOTE_ACCESS", "").strip().lower() in ("true", "1", "yes"):
+            cfg.security.allow_remote_access = True
+
+        env_api_key = os.environ.get("API_KEY") or os.environ.get("ENGINE_API_KEY")
+        if env_api_key and env_api_key.strip():
+            cfg.security.api_key = env_api_key.strip()
+        cfg.security.api_key_configured = bool(get_configured_api_key(cfg.security))
+
         # Reconcile any stale active_runtime that conflicts with the active model
         if cfg.active_model_id:
             try:
@@ -350,6 +447,22 @@ def load_config_locked() -> EngineConfig:
 
 def save_config_locked(cfg: EngineConfig) -> None:
     try:
+        # Guarantee active_runtime is always reconciled with the active model before writing to disk
+        if cfg.active_model_id:
+            try:
+                catalog = {m.id: m for m in load_models_catalog_locked()}
+                active_model = catalog.get(cfg.active_model_id)
+                if not active_model:
+                    for m in catalog.values():
+                        if m.name == cfg.active_model_id or m.file_name == cfg.active_model_id:
+                            active_model = m
+                            cfg.active_model_id = m.id
+                            break
+                if active_model:
+                    cfg.active_runtime = resolve_compatible_runtime(active_model, cfg.active_runtime)
+            except Exception as ex:
+                logger.debug(f"Note: Error reconciling active_runtime during save: {ex}")
+
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(cfg.model_dump(), f, indent=2)
     except Exception as e:
