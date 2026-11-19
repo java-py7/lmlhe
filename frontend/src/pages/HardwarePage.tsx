@@ -21,6 +21,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import { Progress } from '@/components/ui/progress';
+import { AgentDownloadCard } from '@/components/agent/AgentDownloadCard';
 
 export function HardwarePage() {
   const { showSuccess, showError, showInfo } = useToast();
@@ -96,7 +97,7 @@ export function HardwarePage() {
       if (ok) {
         showSuccess('Successfully connected to local PC agent!');
       } else {
-        showError('Local agent not found. Ensure start_local_agent.bat is running.');
+        showError('Local agent not found. Ensure LMLHE-Agent.exe has been started on your computer.');
       }
     } catch (err: any) {
       showError(err.message || 'Connection failed');
@@ -134,74 +135,9 @@ export function HardwarePage() {
         </div>
       </div>
 
-      {/* If Local Agent is Offline, Show Simple Actionable Connection Card */}
+      {/* If Local Agent is Offline, Show Standalone Installer Distribution Card */}
       {!hasHardware ? (
-        <Card className="border-amber-500/30 bg-amber-500/5">
-          <CardContent className="p-6 space-y-4">
-            <div className="flex items-start gap-3">
-              <div className="p-2.5 rounded-lg bg-amber-500/10 text-amber-500 border border-amber-500/20 shrink-0">
-                <Laptop className="w-6 h-6" />
-              </div>
-              <div className="space-y-1">
-                <div className="text-sm font-semibold text-foreground flex items-center gap-2">
-                  Local PC Agent Offline
-                  <Badge variant="outline" className="text-[10px] text-amber-400 border-amber-400/40">
-                    OFFLINE
-                  </Badge>
-                </div>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Start the local agent on your computer to inspect your physical workstation's processor, RAM, discrete GPU, and local drive partitions.
-                </p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-              <div className="p-4 rounded-xl bg-card border border-border space-y-2">
-                <span className="font-semibold text-foreground text-xs flex items-center gap-1.5">
-                  <Terminal className="w-4 h-4 text-primary" />
-                  Step 1: Start Agent on Your Computer
-                </span>
-                <div className="font-mono text-xs p-2.5 rounded bg-slate-950 text-slate-200 overflow-x-auto select-all">
-                  start_local_agent.bat
-                </div>
-                <p className="text-[11px] text-muted-foreground">
-                  Double-click <code className="text-foreground font-mono">start_local_agent.bat</code> or run <code className="text-foreground font-mono">python local_agent.py</code> in your project directory.
-                </p>
-              </div>
-
-              <div className="p-4 rounded-xl bg-card border border-border space-y-2">
-                <span className="font-semibold text-foreground text-xs flex items-center gap-1.5">
-                  <RefreshCw className="w-4 h-4 text-primary" />
-                  Step 2: Connect to Local Agent
-                </span>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={agentUrlInput}
-                    onChange={(e) => {
-                      setAgentUrlInput(e.target.value);
-                      setLocalAgentUrl(e.target.value);
-                    }}
-                    placeholder="http://127.0.0.1:8008"
-                    className="flex-1 h-9 px-3 rounded bg-background border border-input text-xs font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                  />
-                  <Button
-                    size="sm"
-                    onClick={handleConnectAgent}
-                    disabled={isProbing}
-                    className="h-9 gap-1.5 text-xs shrink-0"
-                  >
-                    <RefreshCw className={isProbing ? 'w-3.5 h-3.5 animate-spin' : 'w-3.5 h-3.5'} />
-                    {isProbing ? 'Connecting...' : 'Connect'}
-                  </Button>
-                </div>
-                <p className="text-[11px] text-muted-foreground">
-                  Default probe port: 8008 or 8000 on loopback.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <AgentDownloadCard />
       ) : (
         /* Physical Workstation Hardware Profiles & Bottlenecks */
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

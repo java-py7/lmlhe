@@ -405,7 +405,7 @@ export function DashboardPage() {
                 ) : (
                   <div className="p-3 rounded-lg border border-dashed border-border bg-muted/20 text-center text-xs text-muted-foreground">
                     {!hasHardware
-                      ? 'Local drives not detected. Launch start_local_agent.bat on your PC to view C:\\ and D:\\ drives.'
+                      ? 'Local drives not detected. Connect the Local PC Agent to view C:\\ and D:\\ drives.'
                       : 'No storage volumes detected.'}
                   </div>
                 )}

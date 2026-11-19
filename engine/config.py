@@ -13,7 +13,10 @@ from typing import Dict, Any, List, Optional, Union
 from pydantic import BaseModel, Field, ConfigDict
 
 # Base Directory & Storage Paths
-BASE_DIR = Path(__file__).resolve().parent.parent
+if getattr(sys, "frozen", False):
+    BASE_DIR = Path(sys.executable).resolve().parent
+else:
+    BASE_DIR = Path(__file__).resolve().parent.parent
 STORAGE_DIR = BASE_DIR / "storage"
 STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 CONFIG_FILE = STORAGE_DIR / "config.json"

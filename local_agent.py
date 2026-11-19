@@ -17,8 +17,12 @@ from fastapi import FastAPI, Request, Response, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
-# Ensure repository root is in sys.path
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# Ensure repository root or executable directory is in sys.path
+if getattr(sys, 'frozen', False):
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 

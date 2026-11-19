@@ -422,7 +422,7 @@ export function AdvisorPage() {
               <div className="py-2 text-center text-xs text-muted-foreground space-y-1">
                 <p className="font-medium text-foreground">Local Agent Offline</p>
                 <p className="text-[11px]">
-                  Run <code className="text-primary font-mono">start_local_agent.bat</code> to evaluate models on your actual hardware.
+                  Download and launch the standalone Local PC Agent to evaluate models on your actual hardware.
                 </p>
               </div>
             ) : (

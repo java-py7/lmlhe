@@ -10,6 +10,7 @@ import {
   SetupProgress,
   BenchmarkRecord,
   LocalAgentStatusResponse,
+  AgentInstallersResponse,
 } from './types';
 
 let activeLocalAgentUrl: string = localStorage.getItem('engine_local_agent_url') || 'http://127.0.0.1:8008';
@@ -351,6 +352,9 @@ export const api = {
     request<{ status: string; guide: any }>(
       `/api/v1/advisor/runtimes/install-guide/${encodeURIComponent(runtimeId)}`
     ),
+
+  // Agent Distribution & Installers
+  getAgentInstallers: () => request<AgentInstallersResponse>('/api/v1/agent/installers'),
 
   // Inference (Non-streaming)
   generateInference: (prompt: string, model?: string, temperature: number = 0.7, maxTokens: number = 512) =>

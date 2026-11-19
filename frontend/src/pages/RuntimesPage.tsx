@@ -300,7 +300,7 @@ export function RuntimesPage() {
               </p>
               <p className="text-[11px] text-muted-foreground max-w-md mx-auto">
                 {localAgent.status !== 'connected'
-                  ? 'To discover your local Ollama models and GGUFs on this PC, run start_local_agent.bat on your computer.'
+                  ? 'To discover your local Ollama models and GGUFs on this PC, launch the standalone Local PC Agent on your computer.'
                   : 'Add model directories or install models in Ollama, then click Scan All.'}
               </p>
             </div>

@@ -344,3 +344,30 @@ export interface SetupProgress {
   current_step: string;
   error?: string;
 }
+
+export interface AgentInstallerItem {
+  os: string;
+  name: string;
+  available: boolean;
+  status?: string;
+  filename?: string;
+  download_url?: string;
+  direct_url?: string;
+  size_formatted?: string;
+  format?: string;
+  badge?: string;
+  auto_start?: boolean;
+  instructions?: string[];
+  message?: string;
+}
+
+export interface AgentInstallersResponse {
+  status: string;
+  version: string;
+  installers: {
+    windows: AgentInstallerItem;
+    linux: AgentInstallerItem;
+    macos: AgentInstallerItem;
+    [key: string]: AgentInstallerItem;
+  };
+}
