@@ -176,7 +176,7 @@ function mapAdvisorRecommendation(raw: any): AdvisorRecommendationItem {
 export function AdvisorPage() {
   const navigate = useNavigate();
   const { showSuccess, showError, showInfo } = useToast();
-  const { refreshModels, hardware, isHosted, localAgent } = useEngine();
+  const { refreshModels, hardware, localAgent } = useEngine();
 
   // Filters & Parameters
   const [workload, setWorkload] = useState('general');
@@ -408,19 +408,19 @@ export function AdvisorPage() {
             <CardTitle className="text-xs font-medium text-muted-foreground flex items-center justify-between">
               <span>Hardware Capacity Summary</span>
               <Badge
-                variant={isHosted && localAgent.status !== 'connected' ? 'destructive' : 'outline'}
+                variant={localAgent.status !== 'connected' && !hardware ? 'destructive' : 'outline'}
                 className="text-[10px] uppercase"
               >
-                {isHosted && localAgent.status !== 'connected'
+                {localAgent.status !== 'connected' && !hardware
                   ? 'LOCAL AGENT OFFLINE'
                   : hardware?.os?.system || hwSummary?.os || 'Detected'}
               </Badge>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2.5 text-xs">
-            {isHosted && localAgent.status !== 'connected' ? (
+            {localAgent.status !== 'connected' && !hardware ? (
               <div className="py-2 text-center text-xs text-muted-foreground space-y-1">
-                <p className="font-medium text-foreground">Local PC Not Connected</p>
+                <p className="font-medium text-foreground">Local Agent Offline</p>
                 <p className="text-[11px]">
                   Run <code className="text-primary font-mono">start_local_agent.bat</code> to evaluate models on your actual hardware.
                 </p>

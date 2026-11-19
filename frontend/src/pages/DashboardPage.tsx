@@ -41,7 +41,6 @@ export function DashboardPage() {
     metrics,
     refreshRuntimes,
     refreshModels,
-    isHosted,
     localAgent,
   } = useEngine();
 
@@ -138,7 +137,7 @@ export function DashboardPage() {
             <Badge variant="outline" className="font-mono text-[10px]">
               {hasHardware && hardware?.cpu?.physical_cores
                 ? `${hardware.cpu.physical_cores}C / ${hardware.cpu.logical_threads}T`
-                : isHosted ? 'LOCAL OFFLINE' : 'CPU'}
+                : 'OFFLINE'}
             </Badge>
           </CardHeader>
           <CardContent className="space-y-2">
@@ -167,7 +166,7 @@ export function DashboardPage() {
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-xs font-medium text-muted-foreground">Memory Allocation</CardTitle>
             <Badge variant="outline" className="font-mono text-[10px]">
-              {hasHardware ? `${ramPercent}%` : isHosted ? 'LOCAL OFFLINE' : 'RAM'}
+              {hasHardware ? `${ramPercent}%` : 'OFFLINE'}
             </Badge>
           </CardHeader>
           <CardContent className="space-y-2">
@@ -198,7 +197,7 @@ export function DashboardPage() {
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-xs font-medium text-muted-foreground">GPU & VRAM</CardTitle>
             <Badge variant={gpu?.detected ? 'success' : 'outline'} className="text-[10px]">
-              {hasHardware ? (gpu?.detected ? gpu.vendor || 'DETECTED' : 'CPU-ONLY') : isHosted ? 'LOCAL OFFLINE' : 'OFFLINE'}
+              {hasHardware ? (gpu?.detected ? gpu.vendor || 'DETECTED' : 'CPU-ONLY') : 'OFFLINE'}
             </Badge>
           </CardHeader>
           <CardContent className="space-y-2">
@@ -405,7 +404,7 @@ export function DashboardPage() {
                   ))
                 ) : (
                   <div className="p-3 rounded-lg border border-dashed border-border bg-muted/20 text-center text-xs text-muted-foreground">
-                    {isHosted
+                    {!hasHardware
                       ? 'Local drives not detected. Launch start_local_agent.bat on your PC to view C:\\ and D:\\ drives.'
                       : 'No storage volumes detected.'}
                   </div>

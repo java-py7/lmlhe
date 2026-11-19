@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   Package,
   Terminal,
-  Cloud,
   CheckCircle,
   AlertCircle,
   Copy,
@@ -93,15 +92,15 @@ docker run -d -p 8000:8000 -v $(pwd)/storage:/app/storage --name lmlhe lmlhe-eng
             Deployment, Packaging & Distribution Matrix
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Automated platform installers, standalone execution bundles, Docker containerization, and cloud deployment.
+            Automated platform installers, standalone execution bundles, and containerization.
           </p>
         </div>
         <div className="flex items-center gap-2">
           <Badge
-            variant={deployment.is_hosted ? 'warning' : 'outline'}
+            variant="outline"
             className="font-mono text-xs uppercase"
           >
-            {deployment.badge_text}
+            {deployment.badge_text || 'LOCAL WORKSTATION'}
           </Badge>
         </div>
       </div>
@@ -111,10 +110,10 @@ docker run -d -p 8000:8000 -v $(pwd)/storage:/app/storage --name lmlhe lmlhe-eng
         <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs">
           <div className="space-y-1">
             <div className="font-semibold text-foreground flex items-center gap-2">
-              <Cloud className="w-4 h-4 text-primary" />
-              Runtime Environment: {deployment.provider} ({deployment.environment.toUpperCase()})
+              <Server className="w-4 h-4 text-primary" />
+              Runtime Environment: {deployment.provider || 'Local PC Engine'}
             </div>
-            <p className="text-muted-foreground">{deployment.hardware_notice}</p>
+            <p className="text-muted-foreground">Hardware telemetry reflects your physical local workstation.</p>
           </div>
           <div className="flex items-center gap-3">
             <div className="text-right">
@@ -296,7 +295,7 @@ docker run -d -p 8000:8000 -v $(pwd)/storage:/app/storage --name lmlhe lmlhe-eng
         </Tabs>
       </div>
 
-      {/* Cloud & Containerization Section */}
+      {/* Containerization Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Docker Setup */}
         <Card>
@@ -306,7 +305,7 @@ docker run -d -p 8000:8000 -v $(pwd)/storage:/app/storage --name lmlhe lmlhe-eng
               Docker Containerization
             </CardTitle>
             <CardDescription className="text-xs">
-              Portable OCI container image for reproducible cloud deployments.
+              Portable OCI container image for reproducible engine deployments.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 text-xs">
@@ -341,23 +340,23 @@ docker run -d -p 8000:8000 -v $(pwd)/storage:/app/storage --name lmlhe lmlhe-eng
           </CardContent>
         </Card>
 
-        {/* Cloud Hosting: Render, Hugging Face, Fly.io */}
+        {/* Web Daemon Execution */}
         <Card>
           <CardHeader>
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <Cloud className="w-4 h-4 text-primary" />
-              Cloud PaaS & Hosted Deployment
+              <Server className="w-4 h-4 text-primary" />
+              Web Daemon & Production Execution
             </CardTitle>
             <CardDescription className="text-xs">
-              Configuration profile for hosted cloud instances (Render, HF Spaces, Fly.io).
+              Configuration profile for running the standalone web server and API engine.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 text-xs">
             <div className="p-3 rounded-lg border border-border bg-card/40 space-y-2">
               <div className="flex items-center justify-between">
-                <span className="font-semibold text-foreground">Render.com Web Service</span>
+                <span className="font-semibold text-foreground">Python Engine Service</span>
                 <Badge variant="outline" className="text-[10px]">
-                  Render Live
+                  Web Engine
                 </Badge>
               </div>
               <p className="text-muted-foreground text-[11px]">
@@ -370,18 +369,12 @@ docker run -d -p 8000:8000 -v $(pwd)/storage:/app/storage --name lmlhe lmlhe-eng
             </div>
 
             <div className="p-3 rounded-lg border border-border bg-card/40 space-y-1.5">
-              <span className="font-semibold text-foreground">Production Deployment URL</span>
+              <span className="font-semibold text-foreground">Local Web Dashboard</span>
               <div className="flex items-center justify-between font-mono text-[11px] text-primary">
-                <a
-                  href="https://lmlhe.onrender.com"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="hover:underline flex items-center gap-1"
-                >
-                  https://lmlhe.onrender.com
-                  <ExternalLink className="w-3 h-3" />
-                </a>
-                <span className="text-muted-foreground text-[10px]">Render Web Service</span>
+                <span className="flex items-center gap-1">
+                  http://127.0.0.1:8000
+                </span>
+                <span className="text-muted-foreground text-[10px]">Local Web Interface</span>
               </div>
             </div>
           </CardContent>
@@ -414,8 +407,8 @@ docker run -d -p 8000:8000 -v $(pwd)/storage:/app/storage --name lmlhe lmlhe-eng
                 <tr>
                   <td className="p-2.5 font-bold text-foreground">PORT</td>
                   <td className="p-2.5 text-muted-foreground">8000</td>
-                  <td className="p-2.5 text-muted-foreground">Cloud / Container</td>
-                  <td className="p-2.5 font-sans text-muted-foreground">HTTP server listen port; overridden by cloud providers (e.g. Render).</td>
+                  <td className="p-2.5 text-muted-foreground">Server / Network</td>
+                  <td className="p-2.5 font-sans text-muted-foreground">HTTP server listen port; overridden by system environment ($PORT).</td>
                 </tr>
                 <tr>
                   <td className="p-2.5 font-bold text-foreground">API_KEY</td>
@@ -427,7 +420,7 @@ docker run -d -p 8000:8000 -v $(pwd)/storage:/app/storage --name lmlhe lmlhe-eng
                   <td className="p-2.5 font-bold text-foreground">ALLOW_REMOTE_ACCESS</td>
                   <td className="p-2.5 text-muted-foreground">true</td>
                   <td className="p-2.5 text-muted-foreground">Network</td>
-                  <td className="p-2.5 font-sans text-muted-foreground">Permits non-localhost incoming requests; auto-enabled on cloud containers.</td>
+                  <td className="p-2.5 font-sans text-muted-foreground">Permits incoming network requests when remote binding is enabled.</td>
                 </tr>
                 <tr>
                   <td className="p-2.5 font-bold text-foreground">REQUIRE_AUTH_FOR_LOCAL</td>

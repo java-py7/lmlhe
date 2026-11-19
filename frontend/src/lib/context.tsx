@@ -26,8 +26,6 @@ interface EngineContextType {
   isOriginLocal: boolean;
   isHosted: boolean;
   localAgent: LocalAgentState;
-  serverHardware: HardwareProfile | null;
-  serverDeployment: DeploymentInfo | null;
 
   // Actions
   refreshHardware: () => Promise<void>;
@@ -57,7 +55,7 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
   const [serverConfig, setServerConfig] = useState<EngineConfig | null>(null);
   const [serverDeployment, setServerDeployment] = useState<DeploymentInfo | null>(null);
 
-  // Local Agent state (bridges physical PC when frontend is cloud-hosted)
+  // Local Agent state (bridges physical PC when accessed remotely)
   const [localAgent, setLocalAgent] = useState<LocalAgentState>({
     status: isOriginLocal ? 'connected' : 'checking',
     url: localAgentApi.getUrl(),
@@ -153,34 +151,30 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
     setLocalAgent((prev) => ({ ...prev, url }));
   }, []);
 
-  // Fetch Server Data (always loaded to inspect environment and server configuration)
+  // Fetch Server Configuration
   const refreshServerData = useCallback(async () => {
     try {
-      const [cfgData, hwData] = await Promise.allSettled([
-        api.getConfig(),
-        api.getHardware(),
-      ]);
-
-      if (cfgData.status === 'fulfilled') {
-        setServerConfig(cfgData.value);
-        if (cfgData.value.deployment) {
-          setServerDeployment(cfgData.value.deployment);
-        }
-        if (cfgData.value.active_model_id && !activeModelId) {
-          setActiveModelId(cfgData.value.active_model_id);
-        }
+      const cfgData = await api.getConfig();
+      setServerConfig(cfgData);
+      if (cfgData.deployment) {
+        setServerDeployment(cfgData.deployment);
+      }
+      if (cfgData.active_model_id && !activeModelId) {
+        setActiveModelId(cfgData.active_model_id);
       }
 
-      if (hwData.status === 'fulfilled') {
-        setServerHardware(hwData.value);
-        if (hwData.value.deployment) {
-          setServerDeployment(hwData.value.deployment);
+      if (isOriginLocal) {
+        try {
+          const hw = await api.getHardware();
+          setServerHardware(hw);
+        } catch {
+          // ignore local hardware fetch error
         }
       }
     } catch (err: any) {
       console.warn('Server data note:', err.message);
     }
-  }, [activeModelId]);
+  }, [activeModelId, isOriginLocal]);
 
   // Refresh methods
   const refreshHardware = useCallback(async () => {
@@ -192,7 +186,7 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
         console.warn('Local hardware fetch note:', err.message);
       }
     } else {
-      // In cloud mode: refresh local agent hardware if connected
+      // Refresh local agent hardware if connected
       if (localAgent.status === 'connected') {
         try {
           const hw = await localAgentApi.getHardware();
@@ -266,21 +260,16 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(false);
   }, [isOriginLocal, refreshServerData, refreshHardware, refreshRuntimes, refreshModels, checkLocalAgent]);
 
-  // Determine whether running in a hosted environment (Render, etc.)
-  const isHosted = Boolean(
-    !isOriginLocal &&
-      (serverDeployment?.is_hosted ||
-        serverHardware?.deployment?.is_hosted ||
-        (typeof window !== 'undefined' && window.location.hostname.includes('render.com')))
-  );
+  // Determine whether running in a hosted environment
+  const isHosted = !isOriginLocal;
 
-  // Active Effective Hardware presented to user:
-  // RULE 1: Never substitute cloud hardware for user's local hardware!
+  // Active Effective Hardware:
+  // The Local PC Agent is the ONLY source for user hardware information!
   const effectiveHardware: HardwareProfile | null = isOriginLocal
-    ? serverHardware
+    ? (localAgent.hardware || serverHardware)
     : localAgent.status === 'connected'
     ? localAgent.hardware
-    : null; // Null when disconnected in cloud mode!
+    : null;
 
   // Active Effective Models:
   const effectiveModels: ModelEntry[] = isOriginLocal
@@ -390,8 +379,6 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
         isOriginLocal,
         isHosted,
         localAgent,
-        serverHardware,
-        serverDeployment,
 
         refreshHardware,
         refreshModels,

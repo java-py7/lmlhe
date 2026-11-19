@@ -41,7 +41,6 @@ export function RuntimesPage() {
     refreshModels,
     refreshRuntimes,
     refreshConfig,
-    isHosted,
     localAgent,
   } = useEngine();
 
@@ -103,7 +102,7 @@ export function RuntimesPage() {
     setIsScanning(true);
     showInfo('Scanning configured directories and Ollama library...');
     try {
-      if (isHosted && localAgent.status === 'connected') {
+      if (localAgent.status === 'connected') {
         const res = await api.localAgent.getModels();
         showSuccess(`Scan completed: discovered ${res.models?.length || 0} local models via Local Agent`);
       } else {
@@ -121,7 +120,7 @@ export function RuntimesPage() {
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      if (isHosted && localAgent.status === 'connected') {
+      if (localAgent.status === 'connected') {
         await refreshModels();
         await refreshRuntimes();
         showSuccess('Refreshed local models and runtimes via Local Agent');
@@ -295,12 +294,12 @@ export function RuntimesPage() {
             <div className="p-12 text-center text-xs text-muted-foreground space-y-2">
               <Info className="w-6 h-6 mx-auto text-muted-foreground" />
               <p className="font-medium text-foreground">
-                {isHosted && localAgent.status !== 'connected'
+                {localAgent.status !== 'connected'
                   ? 'Local Agent Offline'
                   : 'No models found matching current filters.'}
               </p>
               <p className="text-[11px] text-muted-foreground max-w-md mx-auto">
-                {isHosted && localAgent.status !== 'connected'
+                {localAgent.status !== 'connected'
                   ? 'To discover your local Ollama models and GGUFs on this PC, run start_local_agent.bat on your computer.'
                   : 'Add model directories or install models in Ollama, then click Scan All.'}
               </p>
