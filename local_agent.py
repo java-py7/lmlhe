@@ -39,6 +39,7 @@ from engine.config import load_config, get_deployment_info, format_bytes, find_s
 
 runtime_registry = RuntimeRegistry()
 llama_manager = LlamaServerManager()
+AGENT_BOUND_PORT = 8008
 
 logging.basicConfig(
     level=logging.INFO,
@@ -57,9 +58,10 @@ app = FastAPI(
 # Chrome/Edge Private Network Access (PNA) and CORS Middleware
 class PrivateNetworkAccessMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        origin = request.headers.get("origin", "*")
+        origin = request.headers.get("origin") or "*"
         is_pna = (
             request.headers.get("access-control-request-private-network") == "true"
+            or "access-control-request-private-network" in request.headers
         )
 
         if request.method == "OPTIONS":
@@ -72,38 +74,52 @@ class PrivateNetworkAccessMiddleware(BaseHTTPMiddleware):
             response.headers["Access-Control-Allow-Headers"] = (
                 request.headers.get(
                     "access-control-request-headers",
-                    "Content-Type, Authorization, X-API-Key, X-Requested-With",
+                    "Content-Type, Authorization, X-API-Key, X-Requested-With, Access-Control-Request-Private-Network",
                 )
             )
-            if is_pna:
-                response.headers["Access-Control-Allow-Private-Network"] = "true"
+            response.headers["Access-Control-Allow-Private-Network"] = "true"
+            response.headers["Access-Control-Max-Age"] = "86400"
             return response
 
         response = await call_next(request)
         response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Access-Control-Allow-Credentials"] = "true"
-        if is_pna or "access-control-request-private-network" in request.headers:
-            response.headers["Access-Control-Allow-Private-Network"] = "true"
+        response.headers["Access-Control-Allow-Private-Network"] = "true"
         return response
 
 
-app.add_middleware(PrivateNetworkAccessMiddleware)
+# Starlette middleware executes in reverse order of addition:
+# PrivateNetworkAccessMiddleware runs first to intercept PNA OPTIONS preflight requests,
+# followed by CORSMiddleware.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_private_network=True,
 )
+app.add_middleware(PrivateNetworkAccessMiddleware)
 
 
 @app.get("/")
+@app.get("/health")
 @app.get("/api/v1/agent/status")
 def get_agent_status():
     """Agent handshake endpoint used by the hosted website to verify local PC connection."""
     hw = HardwareDetector.get_cpu_info()
     ram = HardwareDetector.get_ram_info()
     gpu = HardwareDetector.get_gpu_info()
+    cfg = load_config()
+
+    llama_exe_str = cfg.llama_cpp.executable_path or find_system_llama_server()
+    llama_exe = Path(llama_exe_str) if llama_exe_str else None
+    if llama_exe and not llama_exe.is_absolute():
+        llama_exe = (Path(BASE_DIR) / llama_exe).resolve()
+    llama_detected = bool(llama_exe and llama_exe.is_file())
+
+    ollama_stat = OllamaManager.get_status(cfg.ollama.base_url)
+    ollama_ok = bool(ollama_stat.get("reachable"))
 
     return {
         "status": "ok",
@@ -111,6 +127,9 @@ def get_agent_status():
         "connected": True,
         "role": "local_hardware_agent",
         "version": "2.0.0",
+        "host": "127.0.0.1",
+        "port": AGENT_BOUND_PORT,
+        "agent_url": f"http://127.0.0.1:{AGENT_BOUND_PORT}",
         "timestamp": time.time(),
         "machine": {
             "hostname": platform.node(),
@@ -126,6 +145,12 @@ def get_agent_status():
             "ram_free_gb": ram.get("available_gb", 0),
             "gpu": gpu.get("name") if gpu.get("detected") else "CPU-Only",
             "vram": gpu.get("dedicated_vram_formatted", "0 B"),
+        },
+        "runtimes_summary": {
+            "ollama_detected": ollama_ok,
+            "ollama_url": cfg.ollama.base_url,
+            "ollama_version": ollama_stat.get("version", "unknown"),
+            "llama_cpp_detected": llama_detected,
         },
     }
 
@@ -331,7 +356,7 @@ async def local_chat_completions(request: Request):
 def find_available_port(start_port: int = 8008) -> int:
     import socket
 
-    for p in [start_port, 8000, 8080, 8001, 8009, 8888]:
+    for p in [start_port, 8009, 8010, 8088]:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             if s.connect_ex(("127.0.0.1", p)) != 0:
                 return p
@@ -349,7 +374,7 @@ if __name__ == "__main__":
         "--port",
         type=int,
         default=None,
-        help="Port to bind (default auto-select 8008 or 8000)",
+        help="Port to bind (default 8008)",
     )
     parser.add_argument(
         "--host", type=str, default="127.0.0.1", help="Host interface to bind"
@@ -357,6 +382,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     port = args.port or find_available_port(8008)
+    AGENT_BOUND_PORT = port
 
     # Print spec banner on startup
     hw = HardwareDetector.get_cpu_info()
@@ -386,9 +412,10 @@ if __name__ == "__main__":
     print(
         f"  [+] Ollama Daemon:  {'Online (http://127.0.0.1:11434)' if ollama_ok else 'Not running or not installed'}"
     )
-    print(f"  [+] Local Agent:    http://{args.host}:{port}")
+    print(f"  [+] Agent Server:   http://{args.host}:{port}")
+    print(f"  [+] Status URL:     http://{args.host}:{port}/api/v1/agent/status")
     print(
-        f"  [+] Bridge Active:  Open https://lmlhe.onrender.com/ to inspect your PC\n"
+        f"  [+] Dashboard Link: Open https://lmlhe.onrender.com/ (connects to http://{args.host}:{port})\n"
         + "=" * 74
     )
 

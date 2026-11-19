@@ -1,6 +1,6 @@
 {
-  "active_runtime": "llama.cpp server",
-  "active_model_id": "qwen3_5-4b-q4_k_m",
+  "active_runtime": "ollama",
+  "active_model_id": "ollama_llama3_2_1b",
   "llama_cpp": {
     "executable_path": "C:\\Users\\ADMIN\\Desktop\\CRETALYSIS\\abc-llama\\llamacpp\\llama-server.exe",
     "cli_executable_path": "",

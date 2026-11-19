@@ -70,12 +70,22 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
   const [activeModelId, setActiveModelId] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // Reference to avoid stale probe closures
+  // Reference to avoid stale probe closures and cyclic re-render dependencies
   const isOriginLocalRef = useRef(isOriginLocal);
   isOriginLocalRef.current = isOriginLocal;
 
-  // Probes local agent on user's computer
+  const localAgentRef = useRef(localAgent);
+  localAgentRef.current = localAgent;
+
+  const isProbingRef = useRef(false);
+
+  // Probes local agent on user's computer with controlled single-flight execution
   const checkLocalAgent = useCallback(async (customUrl?: string): Promise<boolean> => {
+    if (isProbingRef.current) {
+      return localAgentRef.current.status === 'connected';
+    }
+    isProbingRef.current = true;
+
     if (customUrl) {
       localAgentApi.setUrl(customUrl);
     }
@@ -119,17 +129,20 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
           metrics: null,
         });
 
+        isProbingRef.current = false;
         return true;
       } else {
         setLocalAgent((prev) => ({
           ...prev,
           status: 'disconnected',
-          error: probe.error || 'Local hardware agent not detected on localhost',
+          error: probe.error || 'Local PC Agent is offline on 127.0.0.1:8008',
           data: null,
           hardware: null,
           models: [],
           runtimes: null,
+          metrics: null,
         }));
+        isProbingRef.current = false;
         return false;
       }
     } catch (err: any) {
@@ -141,7 +154,9 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
         hardware: null,
         models: [],
         runtimes: null,
+        metrics: null,
       }));
+      isProbingRef.current = false;
       return false;
     }
   }, []);
@@ -163,7 +178,7 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
         setActiveModelId(cfgData.active_model_id);
       }
 
-      if (isOriginLocal) {
+      if (isOriginLocalRef.current) {
         try {
           const hw = await api.getHardware();
           setServerHardware(hw);
@@ -174,11 +189,11 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
     } catch (err: any) {
       console.warn('Server data note:', err.message);
     }
-  }, [activeModelId, isOriginLocal]);
+  }, [activeModelId]);
 
   // Refresh methods
   const refreshHardware = useCallback(async () => {
-    if (isOriginLocal) {
+    if (isOriginLocalRef.current) {
       try {
         const data = await api.getHardware();
         setServerHardware(data);
@@ -187,20 +202,19 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
       }
     } else {
       // Refresh local agent hardware if connected
-      if (localAgent.status === 'connected') {
+      if (localAgentRef.current.status === 'connected') {
         try {
           const hw = await localAgentApi.getHardware();
           setLocalAgent((prev) => ({ ...prev, hardware: hw }));
-        } catch {
-          // Probe again if disconnected
-          await checkLocalAgent();
+        } catch (err: any) {
+          console.warn('Hardware refresh error:', err.message);
         }
       }
     }
-  }, [isOriginLocal, localAgent.status, checkLocalAgent]);
+  }, []);
 
   const refreshModels = useCallback(async () => {
-    if (isOriginLocal) {
+    if (isOriginLocalRef.current) {
       try {
         const data = await api.getModels();
         setLocalAgent((prev) => ({ ...prev, models: data.models || [] }));
@@ -211,22 +225,22 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
         console.warn('Models fetch note:', err.message);
       }
     } else {
-      if (localAgent.status === 'connected') {
+      if (localAgentRef.current.status === 'connected') {
         try {
           const data = await localAgentApi.getModels();
           setLocalAgent((prev) => ({ ...prev, models: data.models || [] }));
           if (data.active_model_id) {
             setActiveModelId(data.active_model_id);
           }
-        } catch {
-          await checkLocalAgent();
+        } catch (err: any) {
+          console.warn('Models refresh error:', err.message);
         }
       }
     }
-  }, [isOriginLocal, localAgent.status, checkLocalAgent]);
+  }, []);
 
   const refreshRuntimes = useCallback(async () => {
-    if (isOriginLocal) {
+    if (isOriginLocalRef.current) {
       try {
         const data = await api.getRuntimes();
         setLocalAgent((prev) => ({ ...prev, runtimes: data }));
@@ -234,16 +248,16 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
         console.warn('Runtimes fetch note:', err.message);
       }
     } else {
-      if (localAgent.status === 'connected') {
+      if (localAgentRef.current.status === 'connected') {
         try {
           const data = await localAgentApi.getRuntimes();
           setLocalAgent((prev) => ({ ...prev, runtimes: data }));
-        } catch {
-          await checkLocalAgent();
+        } catch (err: any) {
+          console.warn('Runtimes refresh error:', err.message);
         }
       }
     }
-  }, [isOriginLocal, localAgent.status, checkLocalAgent]);
+  }, []);
 
   const refreshConfig = useCallback(async () => {
     await refreshServerData();
@@ -252,13 +266,13 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
   const refreshAll = useCallback(async () => {
     setIsLoading(true);
     await refreshServerData();
-    if (isOriginLocal) {
+    if (isOriginLocalRef.current) {
       await Promise.allSettled([refreshHardware(), refreshRuntimes(), refreshModels()]);
     } else {
       await checkLocalAgent();
     }
     setIsLoading(false);
-  }, [isOriginLocal, refreshServerData, refreshHardware, refreshRuntimes, refreshModels, checkLocalAgent]);
+  }, [refreshServerData, refreshHardware, refreshRuntimes, refreshModels, checkLocalAgent]);
 
   // Determine whether running in a hosted environment
   const isHosted = !isOriginLocal;
@@ -329,13 +343,19 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Initial load
+  // Initial load - runs only once on mount
   useEffect(() => {
     refreshAll();
-  }, [refreshAll]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // Live telemetry polling (polls local agent when connected, or local server when origin is localhost)
+  // Live telemetry polling: strictly active ONLY when connected
   useEffect(() => {
+    // If not connected and not local origin, DO NOT poll at all (stops repeated polling)
+    if (!isOriginLocal && localAgent.status !== 'connected') {
+      return;
+    }
+
     let mounted = true;
     const poll = async () => {
       try {
@@ -356,7 +376,7 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
     };
 
     poll();
-    const interval = setInterval(poll, 2500);
+    const interval = setInterval(poll, 3000);
     return () => {
       mounted = false;
       clearInterval(interval);

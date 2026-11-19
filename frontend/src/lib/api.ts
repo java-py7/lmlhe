@@ -13,7 +13,12 @@ import {
   AgentInstallersResponse,
 } from './types';
 
-let activeLocalAgentUrl: string = localStorage.getItem('engine_local_agent_url') || 'http://127.0.0.1:8008';
+const rawStoredUrl = typeof localStorage !== 'undefined' ? localStorage.getItem('engine_local_agent_url') : null;
+// Sanitize any legacy :8000 entry which was mistakenly polled
+const sanitizedStoredUrl =
+  rawStoredUrl && !rawStoredUrl.includes(':8000') ? rawStoredUrl.trim() : null;
+
+let activeLocalAgentUrl: string = sanitizedStoredUrl || 'http://127.0.0.1:8008';
 
 export function getActiveLocalAgentUrl(): string {
   return activeLocalAgentUrl;
@@ -21,7 +26,9 @@ export function getActiveLocalAgentUrl(): string {
 
 export function setActiveLocalAgentUrl(url: string) {
   activeLocalAgentUrl = url.replace(/\/+$/, '');
-  localStorage.setItem('engine_local_agent_url', activeLocalAgentUrl);
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem('engine_local_agent_url', activeLocalAgentUrl);
+  }
 }
 
 export async function probeLocalAgent(preferredUrl?: string): Promise<{
@@ -30,17 +37,29 @@ export async function probeLocalAgent(preferredUrl?: string): Promise<{
   data?: LocalAgentStatusResponse;
   error?: string;
 }> {
-  const custom = preferredUrl || localStorage.getItem('engine_local_agent_url');
-  const candidates = custom
-    ? [custom, 'http://127.0.0.1:8008', 'http://127.0.0.1:8000', 'http://localhost:8008', 'http://localhost:8000']
-    : ['http://127.0.0.1:8008', 'http://127.0.0.1:8000', 'http://localhost:8008', 'http://localhost:8000'];
+  const candidates: string[] = [];
+
+  // 1. If caller supplied an explicit preferred URL, prioritize it
+  if (preferredUrl && preferredUrl.trim()) {
+    candidates.push(preferredUrl.trim());
+  }
+
+  // 2. If user saved a custom valid URL (other than 8000), try it
+  if (sanitizedStoredUrl) {
+    candidates.push(sanitizedStoredUrl);
+  }
+
+  // 3. Official agent ports (8008 is the designated default, 8009/8010 fallback)
+  candidates.push('http://127.0.0.1:8008');
+  candidates.push('http://localhost:8008');
+  candidates.push('http://127.0.0.1:8009');
 
   const uniqueCandidates = Array.from(new Set(candidates.map((c) => c.replace(/\/+$/, ''))));
 
   for (const url of uniqueCandidates) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 1200);
+      const timeoutId = setTimeout(() => controller.abort(), 1500);
       const res = await fetch(`${url}/api/v1/agent/status`, {
         signal: controller.signal,
         headers: { Accept: 'application/json' },
@@ -48,20 +67,58 @@ export async function probeLocalAgent(preferredUrl?: string): Promise<{
       clearTimeout(timeoutId);
       if (res.ok) {
         const data = await res.json();
-        if (data.status === 'ok') {
+        // Strict agent handshake: Must be the local agent service, never confused with Ollama or cloud backend
+        if (
+          data &&
+          data.status === 'ok' &&
+          (data.role === 'local_hardware_agent' ||
+            data.service === 'lmlhe-local-agent' ||
+            data.service === 'lmlhe-engine')
+        ) {
           setActiveLocalAgentUrl(url);
           return { connected: true, url, data };
         }
       }
     } catch {
-      // try next candidate
+      // Agent not reachable on this candidate, try next
     }
   }
 
   return {
     connected: false,
     url: activeLocalAgentUrl,
-    error: 'Local hardware agent not reachable on 127.0.0.1 (ports 8008/8000)',
+    error: 'Local hardware agent not reachable on 127.0.0.1:8008',
+  };
+}
+
+export async function probeLocalAgentWithRetry(
+  preferredUrl?: string,
+  maxAttempts: number = 3,
+  delayMs: number = 2000
+): Promise<{
+  connected: boolean;
+  url: string;
+  data?: LocalAgentStatusResponse;
+  error?: string;
+  attempts: number;
+}> {
+  let attempts = 0;
+  while (attempts < maxAttempts) {
+    attempts++;
+    const res = await probeLocalAgent(preferredUrl);
+    if (res.connected) {
+      return { ...res, attempts };
+    }
+    if (attempts < maxAttempts) {
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+  }
+
+  return {
+    connected: false,
+    url: activeLocalAgentUrl,
+    error: `Local hardware agent not reachable after ${maxAttempts} attempt(s)`,
+    attempts,
   };
 }
 

@@ -37,7 +37,9 @@ export function HardwarePage() {
   } = useEngine();
 
   // Local agent URL input state
-  const [agentUrlInput, setAgentUrlInput] = useState(localAgent.url || 'http://127.0.0.1:8008');
+  const [agentUrlInput, setAgentUrlInput] = useState(
+    localAgent.url && !localAgent.url.includes(':8000') ? localAgent.url : 'http://127.0.0.1:8008'
+  );
   const [isProbing, setIsProbing] = useState(false);
 
   // Calculator state

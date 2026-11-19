@@ -243,14 +243,15 @@ class PrivateNetworkAccessMiddleware(BaseHTTPMiddleware):
             response.headers["Access-Control-Allow-Private-Network"] = "true"
         return response
 
-app.add_middleware(PrivateNetworkAccessMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_private_network=True,
 )
+app.add_middleware(PrivateNetworkAccessMiddleware)
 
 
 @app.get("/api/v1/agent/status")

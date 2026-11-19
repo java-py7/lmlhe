@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import {
   Laptop,
   RefreshCw,
+  Cpu,
+  CheckCircle2,
+  AlertCircle,
 } from 'lucide-react';
 import { useEngine } from '@/lib/context';
 import { useToast } from '@/lib/toast';
@@ -28,7 +31,7 @@ export function LocalAgentBanner() {
       if (ok) {
         showSuccess('Successfully connected to local PC agent!');
       } else {
-        showError('Local agent not found on 127.0.0.1. Launch LMLHE-Agent.exe on your computer.');
+        showError('Local agent not found on 127.0.0.1:8008. Make sure LMLHE-Agent.exe is running.');
       }
     } catch (err: any) {
       showError(err.message || 'Connection attempt failed');
@@ -39,6 +42,9 @@ export function LocalAgentBanner() {
 
   if (localAgent.status === 'connected') {
     const spec = localAgent.data?.quick_spec;
+    const runtimes = localAgent.data?.runtimes_summary;
+    const isOllamaRunning = Boolean(runtimes?.ollama_detected);
+
     return (
       <div className="p-3.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
@@ -47,12 +53,27 @@ export function LocalAgentBanner() {
             <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
           </span>
           <div>
-            <span className="font-semibold text-foreground flex items-center gap-1.5">
-              <Laptop className="w-4 h-4 text-emerald-400" />
-              Connected to Local PC: {localAgent.data?.machine?.hostname || 'Physical Workstation'}
-            </span>
-            <span className="text-[11px] text-muted-foreground">
-              {spec ? `${spec.cpu} • ${spec.ram_total_gb.toFixed(1)} GB RAM • ${spec.gpu}` : 'Hardware & models active'} ({localAgent.url})
+            <div className="font-semibold text-foreground flex flex-wrap items-center gap-2">
+              <span className="flex items-center gap-1.5">
+                <Laptop className="w-4 h-4 text-emerald-400" />
+                Connected to Local PC: {localAgent.data?.machine?.hostname || 'Physical Workstation'}
+              </span>
+              <Badge variant="outline" className="font-mono text-[10px] text-emerald-400 border-emerald-500/30">
+                PORT {localAgent.data?.port || 8008}
+              </Badge>
+              {isOllamaRunning ? (
+                <Badge variant="outline" className="text-[10px] text-cyan-400 border-cyan-500/30 bg-cyan-500/10 flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" />
+                  Ollama Daemon (127.0.0.1:11434)
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="text-[10px] text-muted-foreground border-border">
+                  Ollama (Offline)
+                </Badge>
+              )}
+            </div>
+            <span className="text-[11px] text-muted-foreground block mt-0.5">
+              {spec ? `${spec.cpu} • ${spec.ram_total_gb.toFixed(1)} GB RAM • ${spec.gpu}` : 'Hardware & models active'} ({localAgent.url || 'http://127.0.0.1:8008'})
             </span>
           </div>
         </div>

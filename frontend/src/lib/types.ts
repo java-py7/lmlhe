@@ -14,6 +14,9 @@ export interface LocalAgentStatusResponse {
   connected: boolean;
   role: string;
   version: string;
+  port?: number;
+  host?: string;
+  agent_url?: string;
   timestamp: number;
   machine: {
     hostname: string;
@@ -22,6 +25,12 @@ export interface LocalAgentStatusResponse {
     python_version: string;
   };
   quick_spec: LocalAgentQuickSpec;
+  runtimes_summary?: {
+    ollama_detected?: boolean;
+    ollama_url?: string;
+    ollama_version?: string;
+    llama_cpp_detected?: boolean;
+  };
 }
 
 export interface LocalAgentState {

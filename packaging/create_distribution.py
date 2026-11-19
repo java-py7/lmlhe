@@ -42,7 +42,7 @@ echo   Large-Model-on-Light-Hardware Engine: Local Agent
 echo ========================================================
 echo.
 echo Starting agent in background on port 8008...
-start "" "%~dp0LMLHE-Agent.exe"
+start "" "%~dp0LMLHE-Agent.exe" --port 8008
 echo [OK] Local agent is active.
 echo You can now return to the web dashboard in your browser.
 timeout /t 3 >nul

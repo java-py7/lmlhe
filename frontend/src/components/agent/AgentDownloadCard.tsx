@@ -35,7 +35,9 @@ export function AgentDownloadCard({ compact = false, className = '' }: AgentDown
   const [selectedOS, setSelectedOS] = useState<'windows' | 'linux' | 'macos'>('windows');
   const [isChecking, setIsChecking] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [inputUrl, setInputUrl] = useState(localAgent.url || 'http://127.0.0.1:8008');
+  const initialUrl =
+    localAgent.url && !localAgent.url.includes(':8000') ? localAgent.url : 'http://127.0.0.1:8008';
+  const [inputUrl, setInputUrl] = useState(initialUrl);
 
   // Detect user OS on mount
   useEffect(() => {
