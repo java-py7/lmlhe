@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import type { DownloadTask, ModelSpec, QuantizationSpec } from '../shared/types.ts';
 import { MODELS, QUANTIZATIONS } from './catalog.ts';
 
@@ -10,8 +11,21 @@ export class DownloadManager {
 
   constructor(modelsDir: string) {
     this.modelsDir = modelsDir;
-    if (!fs.existsSync(this.modelsDir)) {
-      fs.mkdirSync(this.modelsDir, { recursive: true });
+    try {
+      if (!fs.existsSync(this.modelsDir)) {
+        fs.mkdirSync(this.modelsDir, { recursive: true });
+      }
+    } catch (err) {
+      console.warn(`[DownloadManager] Could not initialize directory at ${modelsDir}, falling back to tmpdir:`, err);
+      try {
+        const tmpDir = path.join(os.tmpdir(), 'models');
+        this.modelsDir = tmpDir;
+        if (!fs.existsSync(this.modelsDir)) {
+          fs.mkdirSync(this.modelsDir, { recursive: true });
+        }
+      } catch (innerErr) {
+        console.warn(`[DownloadManager] Could not create tmp models dir:`, innerErr);
+      }
     }
   }
 

@@ -1,5 +1,6 @@
 // server/app.ts
 import express from "express";
+import os4 from "node:os";
 import path2 from "node:path";
 
 // server/catalog.ts
@@ -2057,13 +2058,27 @@ function getSystemHardwareProfile() {
 // server/downloader.ts
 import fs2 from "node:fs";
 import path from "node:path";
+import os2 from "node:os";
 var DownloadManager = class {
   constructor(modelsDir2) {
     this.tasks = /* @__PURE__ */ new Map();
     this.abortControllers = /* @__PURE__ */ new Map();
     this.modelsDir = modelsDir2;
-    if (!fs2.existsSync(this.modelsDir)) {
-      fs2.mkdirSync(this.modelsDir, { recursive: true });
+    try {
+      if (!fs2.existsSync(this.modelsDir)) {
+        fs2.mkdirSync(this.modelsDir, { recursive: true });
+      }
+    } catch (err) {
+      console.warn(`[DownloadManager] Could not initialize directory at ${modelsDir2}, falling back to tmpdir:`, err);
+      try {
+        const tmpDir = path.join(os2.tmpdir(), "models");
+        this.modelsDir = tmpDir;
+        if (!fs2.existsSync(this.modelsDir)) {
+          fs2.mkdirSync(this.modelsDir, { recursive: true });
+        }
+      } catch (innerErr) {
+        console.warn(`[DownloadManager] Could not create tmp models dir:`, innerErr);
+      }
     }
   }
   getTasks() {
@@ -2484,7 +2499,7 @@ var RuntimeManager = class {
 };
 
 // server/telemetry.ts
-import os2 from "node:os";
+import os3 from "node:os";
 import { execSync as execSync2 } from "node:child_process";
 var TelemetryCollector = class {
   constructor(runtimeManager2) {
@@ -2508,8 +2523,8 @@ var TelemetryCollector = class {
     const isRunning = session.status === "running" && plan !== null;
     const stressActive = this.runtimeManager.isStressLoadActive();
     const cpuUtilPct = sampleCpuUsagePercent();
-    const totalRamBytes = os2.totalmem();
-    const freeRamBytes = os2.freemem();
+    const totalRamBytes = os3.totalmem();
+    const freeRamBytes = os3.freemem();
     const ramTotalGB = Math.round(totalRamBytes / 1e9 * 100) / 100;
     const ramUsedGB = Math.round((totalRamBytes - freeRamBytes) / 1e9 * 100) / 100;
     let vramTotalGB = profile?.unifiedMemory ? profile.unifiedMemoryPoolGB : profile?.vramTotalGB ?? 0;
@@ -2621,7 +2636,10 @@ async function executeBenchmarkRun(profile, config, runtimeManager2) {
 
 // server/app.ts
 var benchmarks = [...BASELINE_BENCHMARKS];
-var modelsDir = path2.resolve(process.cwd(), "models");
+var isServerless = Boolean(
+  process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.LAMBDA_TASK_ROOT || process.cwd() === "/var/task"
+);
+var modelsDir = isServerless ? path2.join(os4.tmpdir(), "models") : path2.resolve(process.cwd(), "models");
 var downloadManager = new DownloadManager(modelsDir);
 var runtimeManager = new RuntimeManager();
 var telemetryCollector = new TelemetryCollector(runtimeManager);

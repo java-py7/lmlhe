@@ -197,7 +197,16 @@ async function probeWebGPU(): Promise<{
       };
     }
 
-    const adapter = await nav.gpu.requestAdapter();
+    let adapter = null;
+    try {
+      adapter = await nav.gpu.requestAdapter({ powerPreference: 'high-performance' });
+      if (!adapter) {
+        adapter = await nav.gpu.requestAdapter();
+      }
+    } catch {
+      // WebGPU requestAdapter not available or denied by browser/driver
+    }
+
     if (!adapter) {
       return {
         supported: false,

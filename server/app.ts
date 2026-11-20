@@ -1,4 +1,5 @@
 import express from 'express';
+import os from 'node:os';
 import path from 'node:path';
 import type {
   BenchmarkRecord,
@@ -26,7 +27,19 @@ import { executeBenchmarkRun } from './benchmarkRunner.ts';
 
 // In-memory runtime state for engine
 const benchmarks: BenchmarkRecord[] = [...BASELINE_BENCHMARKS];
-const modelsDir = path.resolve(process.cwd(), 'models');
+
+// Serverless environments (AWS Lambda / Vercel) have a read-only root filesystem at /var/task.
+// Only /tmp is writable, so we safely fall back to os.tmpdir() when running serverless.
+const isServerless = Boolean(
+  process.env.VERCEL ||
+  process.env.AWS_LAMBDA_FUNCTION_NAME ||
+  process.env.LAMBDA_TASK_ROOT ||
+  process.cwd() === '/var/task'
+);
+const modelsDir = isServerless
+  ? path.join(os.tmpdir(), 'models')
+  : path.resolve(process.cwd(), 'models');
+
 const downloadManager = new DownloadManager(modelsDir);
 const runtimeManager = new RuntimeManager();
 const telemetryCollector = new TelemetryCollector(runtimeManager);
