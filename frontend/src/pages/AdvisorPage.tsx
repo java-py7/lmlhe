@@ -176,7 +176,7 @@ function mapAdvisorRecommendation(raw: any): AdvisorRecommendationItem {
 export function AdvisorPage() {
   const navigate = useNavigate();
   const { showSuccess, showError, showInfo } = useToast();
-  const { refreshModels, hardware, localAgent } = useEngine();
+  const { refreshModels, hardware, clientHardware, isOriginLocal } = useEngine();
 
   // Filters & Parameters
   const [workload, setWorkload] = useState('general');
@@ -408,21 +408,19 @@ export function AdvisorPage() {
             <CardTitle className="text-xs font-medium text-muted-foreground flex items-center justify-between">
               <span>Hardware Capacity Summary</span>
               <Badge
-                variant={localAgent.status !== 'connected' && !hardware ? 'destructive' : 'outline'}
+                variant={!hardware && !clientHardware ? 'outline' : 'success'}
                 className="text-[10px] uppercase"
               >
-                {localAgent.status !== 'connected' && !hardware
-                  ? 'LOCAL AGENT OFFLINE'
-                  : hardware?.os?.system || hwSummary?.os || 'Detected'}
+                {hardware?.os?.system || clientHardware?.platform?.os || hwSummary?.os || 'Detected'}
               </Badge>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2.5 text-xs">
-            {localAgent.status !== 'connected' && !hardware ? (
+            {!hardware && !clientHardware ? (
               <div className="py-2 text-center text-xs text-muted-foreground space-y-1">
-                <p className="font-medium text-foreground">Local Agent Offline</p>
+                <p className="font-medium text-foreground">Hardware Detection Initializing</p>
                 <p className="text-[11px]">
-                  Download and launch the standalone Local PC Agent to evaluate models on your actual hardware.
+                  Evaluating browser and system hardware capabilities...
                 </p>
               </div>
             ) : (
@@ -430,9 +428,9 @@ export function AdvisorPage() {
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Available System RAM</span>
                   <span className="font-semibold text-foreground">
-                    {hardware?.ram?.available_gb !== undefined
+                    {hardware?.ram?.available_gb !== undefined && hardware?.ram?.available_gb > 0
                       ? `${hardware.ram.available_gb.toFixed(1)} GB free`
-                      : hwSummary?.ram?.available_formatted || '—'}
+                      : clientHardware?.ram?.total_formatted || hwSummary?.ram?.total_formatted || '—'}
                   </span>
                 </div>
                 <div className="flex justify-between">

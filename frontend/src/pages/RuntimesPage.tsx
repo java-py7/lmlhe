@@ -41,7 +41,9 @@ export function RuntimesPage() {
     refreshModels,
     refreshRuntimes,
     refreshConfig,
-    localAgent,
+    isOriginLocal,
+    clientRuntimes,
+    refreshClientDetection,
   } = useEngine();
 
   // Filters
@@ -102,14 +104,14 @@ export function RuntimesPage() {
     setIsScanning(true);
     showInfo('Scanning configured directories and Ollama library...');
     try {
-      if (localAgent.status === 'connected') {
-        const res = await api.localAgent.getModels();
-        showSuccess(`Scan completed: discovered ${res.models?.length || 0} local models via Local Agent`);
+      if (!isOriginLocal) {
+        await refreshClientDetection();
+        showSuccess(`Direct scan completed: discovered ${clientRuntimes?.ollama?.models?.length || 0} local Ollama models`);
       } else {
         const res = await api.scanModels();
         showSuccess(`Scan completed: discovered ${res.count} models (${res.available_count} available)`);
+        await refreshModels();
       }
-      await refreshModels();
     } catch (err: any) {
       showError(err.message || 'Model scan failed');
     } finally {
@@ -120,14 +122,14 @@ export function RuntimesPage() {
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      if (localAgent.status === 'connected') {
-        await refreshModels();
-        await refreshRuntimes();
-        showSuccess('Refreshed local models and runtimes via Local Agent');
+      if (!isOriginLocal) {
+        await refreshClientDetection();
+        showSuccess('Refreshed local runtimes and models via direct browser detection');
       } else {
         const res = await api.refreshModels();
         showSuccess(`Refreshed ${res.count} models (${res.available_count} available)`);
         await refreshModels();
+        await refreshRuntimes();
       }
     } catch (err: any) {
       showError(err.message || 'Model refresh failed');
@@ -294,14 +296,10 @@ export function RuntimesPage() {
             <div className="p-12 text-center text-xs text-muted-foreground space-y-2">
               <Info className="w-6 h-6 mx-auto text-muted-foreground" />
               <p className="font-medium text-foreground">
-                {localAgent.status !== 'connected'
-                  ? 'Local Agent Offline'
-                  : 'No models found matching current filters.'}
+                No models found matching current filters.
               </p>
               <p className="text-[11px] text-muted-foreground max-w-md mx-auto">
-                {localAgent.status !== 'connected'
-                  ? 'To discover your local Ollama models and GGUFs on this PC, launch the standalone Local PC Agent on your computer.'
-                  : 'Add model directories or install models in Ollama, then click Scan All.'}
+                Pull models in Ollama (e.g. <code>ollama pull llama3.2:1b</code>), or add local model directories, then click Scan All.
               </p>
             </div>
           ) : (

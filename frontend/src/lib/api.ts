@@ -9,162 +9,7 @@ import {
   AdvisorRecommendationItem,
   SetupProgress,
   BenchmarkRecord,
-  LocalAgentStatusResponse,
-  AgentInstallersResponse,
 } from './types';
-
-const rawStoredUrl = typeof localStorage !== 'undefined' ? localStorage.getItem('engine_local_agent_url') : null;
-// Sanitize any legacy :8000 entry which was mistakenly polled
-const sanitizedStoredUrl =
-  rawStoredUrl && !rawStoredUrl.includes(':8000') ? rawStoredUrl.trim() : null;
-
-let activeLocalAgentUrl: string = sanitizedStoredUrl || 'http://127.0.0.1:8008';
-
-export function getActiveLocalAgentUrl(): string {
-  return activeLocalAgentUrl;
-}
-
-export function setActiveLocalAgentUrl(url: string) {
-  activeLocalAgentUrl = url.replace(/\/+$/, '');
-  if (typeof localStorage !== 'undefined') {
-    localStorage.setItem('engine_local_agent_url', activeLocalAgentUrl);
-  }
-}
-
-export async function probeLocalAgent(preferredUrl?: string): Promise<{
-  connected: boolean;
-  url: string;
-  data?: LocalAgentStatusResponse;
-  error?: string;
-}> {
-  const candidates: string[] = [];
-
-  // 1. If caller supplied an explicit preferred URL, prioritize it
-  if (preferredUrl && preferredUrl.trim()) {
-    candidates.push(preferredUrl.trim());
-  }
-
-  // 2. If user saved a custom valid URL (other than 8000), try it
-  if (sanitizedStoredUrl) {
-    candidates.push(sanitizedStoredUrl);
-  }
-
-  // 3. Official agent ports (8008 is the designated default, 8009/8010 fallback)
-  candidates.push('http://127.0.0.1:8008');
-  candidates.push('http://localhost:8008');
-  candidates.push('http://127.0.0.1:8009');
-
-  const uniqueCandidates = Array.from(new Set(candidates.map((c) => c.replace(/\/+$/, ''))));
-
-  for (const url of uniqueCandidates) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 1500);
-      const res = await fetch(`${url}/api/v1/agent/status`, {
-        signal: controller.signal,
-        headers: { Accept: 'application/json' },
-      });
-      clearTimeout(timeoutId);
-      if (res.ok) {
-        const data = await res.json();
-        // Strict agent handshake: Must be the local agent service, never confused with Ollama or cloud backend
-        if (
-          data &&
-          data.status === 'ok' &&
-          (data.role === 'local_hardware_agent' ||
-            data.service === 'lmlhe-local-agent' ||
-            data.service === 'lmlhe-engine')
-        ) {
-          setActiveLocalAgentUrl(url);
-          return { connected: true, url, data };
-        }
-      }
-    } catch {
-      // Agent not reachable on this candidate, try next
-    }
-  }
-
-  return {
-    connected: false,
-    url: activeLocalAgentUrl,
-    error: 'Local hardware agent not reachable on 127.0.0.1:8008',
-  };
-}
-
-export async function probeLocalAgentWithRetry(
-  preferredUrl?: string,
-  maxAttempts: number = 3,
-  delayMs: number = 2000
-): Promise<{
-  connected: boolean;
-  url: string;
-  data?: LocalAgentStatusResponse;
-  error?: string;
-  attempts: number;
-}> {
-  let attempts = 0;
-  while (attempts < maxAttempts) {
-    attempts++;
-    const res = await probeLocalAgent(preferredUrl);
-    if (res.connected) {
-      return { ...res, attempts };
-    }
-    if (attempts < maxAttempts) {
-      await new Promise((r) => setTimeout(r, delayMs));
-    }
-  }
-
-  return {
-    connected: false,
-    url: activeLocalAgentUrl,
-    error: `Local hardware agent not reachable after ${maxAttempts} attempt(s)`,
-    attempts,
-  };
-}
-
-export async function localAgentRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const url = `${activeLocalAgentUrl}${endpoint}`;
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 12000);
-
-  const headers = new Headers(options.headers || {});
-  if (!headers.has('Content-Type') && !(options.body instanceof FormData)) {
-    headers.set('Content-Type', 'application/json');
-  }
-
-  try {
-    const res = await fetch(url, { ...options, headers, signal: controller.signal });
-    clearTimeout(timeoutId);
-    if (!res.ok) {
-      let errMessage = `HTTP ${res.status} ${res.statusText}`;
-      try {
-        const data = await res.json();
-        if (data.detail) errMessage = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail);
-      } catch {}
-      throw new Error(errMessage);
-    }
-    return await res.json();
-  } catch (err: any) {
-    clearTimeout(timeoutId);
-    throw err;
-  }
-}
-
-export const localAgentApi = {
-  probe: probeLocalAgent,
-  getUrl: getActiveLocalAgentUrl,
-  setUrl: setActiveLocalAgentUrl,
-  getStatus: () => localAgentRequest<LocalAgentStatusResponse>('/api/v1/agent/status'),
-  getHardware: () => localAgentRequest<HardwareProfile>('/api/v1/hardware'),
-  getModels: () => localAgentRequest<{ status: string; models: ModelEntry[]; active_model_id?: string }>('/api/v1/models'),
-  getRuntimes: () => localAgentRequest<RuntimeStatusResponse>('/api/v1/runtimes'),
-  getMetrics: () => localAgentRequest<LiveMetrics>('/api/v1/metrics'),
-  selectModel: (modelId: string) =>
-    localAgentRequest<{ status: string; active_model_id: string; active_runtime?: string }>('/api/v1/models/select', {
-      method: 'POST',
-      body: JSON.stringify({ model_id: modelId }),
-    }),
-};
 
 function getApiBase(): string {
   const custom = localStorage.getItem('engine_api_base');
@@ -225,8 +70,6 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 }
 
 export const api = {
-  localAgent: localAgentApi,
-  probeLocalAgent,
   // Health
   getHealth: () => request<any>('/api/v1/health'),
 
@@ -409,9 +252,6 @@ export const api = {
     request<{ status: string; guide: any }>(
       `/api/v1/advisor/runtimes/install-guide/${encodeURIComponent(runtimeId)}`
     ),
-
-  // Agent Distribution & Installers
-  getAgentInstallers: () => request<AgentInstallersResponse>('/api/v1/agent/installers'),
 
   // Inference (Non-streaming)
   generateInference: (prompt: string, model?: string, temperature: number = 0.7, maxTokens: number = 512) =>

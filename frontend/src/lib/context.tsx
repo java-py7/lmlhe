@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
-import { api, localAgentApi } from './api';
+import { api } from './api';
 import {
   HardwareProfile,
   ModelEntry,
@@ -7,8 +7,18 @@ import {
   EngineConfig,
   LiveMetrics,
   DeploymentInfo,
-  LocalAgentState,
+  ClientDetectedHardware,
+  ClientDetectedRuntimes,
 } from './types';
+import {
+  detectBrowserHardware,
+  detectWebGPUAsync,
+  detectBrowserStorageAsync,
+  detectLocalOllamaDirect,
+  detectLocalLlamaCppDirect,
+  buildClientHardwareProfile,
+  buildClientRuntimeStatus,
+} from './browserDetection';
 import { useToast } from './toast';
 
 interface EngineContextType {
@@ -21,11 +31,13 @@ interface EngineContextType {
   config: EngineConfig | null;
   metrics: LiveMetrics | null;
   isLoading: boolean;
+  isDetecting: boolean;
 
-  // Environment & Local Agent status
+  // Direct Environment & Browser Detection
   isOriginLocal: boolean;
   isHosted: boolean;
-  localAgent: LocalAgentState;
+  clientHardware: ClientDetectedHardware | null;
+  clientRuntimes: ClientDetectedRuntimes | null;
 
   // Actions
   refreshHardware: () => Promise<void>;
@@ -33,8 +45,7 @@ interface EngineContextType {
   refreshRuntimes: () => Promise<void>;
   refreshConfig: () => Promise<void>;
   refreshAll: () => Promise<void>;
-  checkLocalAgent: (customUrl?: string) => Promise<boolean>;
-  setLocalAgentUrl: (url: string) => void;
+  refreshClientDetection: () => Promise<void>;
   selectModel: (modelId: string) => Promise<void>;
   switchRuntime: (runtime: string) => Promise<void>;
 }
@@ -53,117 +64,107 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
   // Server state (from origin backend)
   const [serverHardware, setServerHardware] = useState<HardwareProfile | null>(null);
   const [serverConfig, setServerConfig] = useState<EngineConfig | null>(null);
-  const [serverDeployment, setServerDeployment] = useState<DeploymentInfo | null>(null);
+  const [, setServerDeployment] = useState<DeploymentInfo | null>(null);
+  const [serverModels, setServerModels] = useState<ModelEntry[]>([]);
+  const [serverRuntimes, setServerRuntimes] = useState<RuntimeStatusResponse | null>(null);
+  const [serverMetrics, setServerMetrics] = useState<LiveMetrics | null>(null);
 
-  // Local Agent state (bridges physical PC when accessed remotely)
-  const [localAgent, setLocalAgent] = useState<LocalAgentState>({
-    status: isOriginLocal ? 'connected' : 'checking',
-    url: localAgentApi.getUrl(),
-    data: null,
-    hardware: null,
-    models: [],
-    runtimes: null,
-    metrics: null,
-  });
+  // Direct browser & local service detection state
+  const [clientHardware, setClientHardware] = useState<ClientDetectedHardware | null>(null);
+  const [clientRuntimes, setClientRuntimes] = useState<ClientDetectedRuntimes | null>(null);
+  const [isDetecting, setIsDetecting] = useState<boolean>(false);
 
   // Effective active data state presented to UI
   const [activeModelId, setActiveModelId] = useState<string>('');
+  const [preferredRuntime, setPreferredRuntime] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // Reference to avoid stale probe closures and cyclic re-render dependencies
   const isOriginLocalRef = useRef(isOriginLocal);
   isOriginLocalRef.current = isOriginLocal;
 
-  const localAgentRef = useRef(localAgent);
-  localAgentRef.current = localAgent;
-
-  const isProbingRef = useRef(false);
-
-  // Probes local agent on user's computer with controlled single-flight execution
-  const checkLocalAgent = useCallback(async (customUrl?: string): Promise<boolean> => {
-    if (isProbingRef.current) {
-      return localAgentRef.current.status === 'connected';
-    }
-    isProbingRef.current = true;
-
-    if (customUrl) {
-      localAgentApi.setUrl(customUrl);
-    }
-
-    setLocalAgent((prev) => ({ ...prev, status: 'checking', url: customUrl || prev.url }));
-
+  /**
+   * Direct Browser & Local PC Detection
+   * Probes browser APIs (WebGL, WebGPU, deviceMemory, threads, storage)
+   * and local ports (Ollama at localhost:11434, llama.cpp at localhost:8080)
+   */
+  const runDirectDetection = useCallback(async () => {
+    setIsDetecting(true);
     try {
-      const probe = await api.probeLocalAgent(customUrl);
-      if (probe.connected && probe.data) {
-        // Fetch full physical hardware and models from local agent
-        let agentHw: HardwareProfile | null = null;
-        let agentModels: ModelEntry[] = [];
-        let agentRuntimes: RuntimeStatusResponse | null = null;
+      // 1. Synchronous browser hardware specs
+      const initialHw = detectBrowserHardware();
 
-        try {
-          const [hwData, modelsData, runtimesData] = await Promise.allSettled([
-            localAgentApi.getHardware(),
-            localAgentApi.getModels(),
-            localAgentApi.getRuntimes(),
-          ]);
+      // 2. Async WebGPU, Storage, and Local AI runtimes in parallel
+      const [webGpuRes, storageRes, ollamaRes, llamaRes] = await Promise.allSettled([
+        detectWebGPUAsync(),
+        detectBrowserStorageAsync(),
+        detectLocalOllamaDirect(),
+        detectLocalLlamaCppDirect(),
+      ]);
 
-          if (hwData.status === 'fulfilled') agentHw = hwData.value;
-          if (modelsData.status === 'fulfilled') {
-            agentModels = modelsData.value.models || [];
-            if (modelsData.value.active_model_id) {
-              setActiveModelId(modelsData.value.active_model_id);
-            }
+      const updatedHw: ClientDetectedHardware = { ...initialHw };
+
+      if (webGpuRes.status === 'fulfilled') {
+        updatedHw.webgpu = webGpuRes.value;
+        if (webGpuRes.value.supported && webGpuRes.value.adapter_name) {
+          if (!updatedHw.gpu.detected || updatedHw.gpu.name.includes('Unavailable')) {
+            updatedHw.gpu.name = webGpuRes.value.adapter_name;
+            updatedHw.gpu.detected = true;
           }
-          if (runtimesData.status === 'fulfilled') agentRuntimes = runtimesData.value;
-        } catch (e: any) {
-          console.warn('Local agent details fetch error:', e.message);
         }
+      }
 
-        setLocalAgent({
-          status: 'connected',
-          url: probe.url,
-          data: probe.data,
-          hardware: agentHw,
-          models: agentModels,
-          runtimes: agentRuntimes,
-          metrics: null,
+      if (storageRes.status === 'fulfilled') {
+        updatedHw.storage = {
+          quota_gb: storageRes.value.quota_gb,
+          used_mb: storageRes.value.used_mb,
+          quota_formatted: storageRes.value.quota_formatted,
+          label: 'Origin Browser Storage Quota',
+        };
+      }
+
+      setClientHardware(updatedHw);
+
+      const runtimesData: ClientDetectedRuntimes = {
+        ollama:
+          ollamaRes.status === 'fulfilled'
+            ? ollamaRes.value
+            : {
+                detected: false,
+                url: 'http://127.0.0.1:11434',
+                models: [],
+                running_models: [],
+                message: 'Ollama not detected',
+              },
+        llama_cpp:
+          llamaRes.status === 'fulfilled'
+            ? llamaRes.value
+            : {
+                detected: false,
+                url: 'http://127.0.0.1:8080',
+                message: 'llama.cpp server not detected',
+              },
+        webgpu: {
+          supported: webGpuRes.status === 'fulfilled' ? webGpuRes.value.supported : false,
+          device_name: webGpuRes.status === 'fulfilled' ? webGpuRes.value.adapter_name : undefined,
+        },
+      };
+
+      setClientRuntimes(runtimesData);
+
+      // Auto-select first available local model if none active
+      if (runtimesData.ollama.detected && runtimesData.ollama.models.length > 0) {
+        setActiveModelId((current) => {
+          if (!current) {
+            return runtimesData.ollama.models[0].id;
+          }
+          return current;
         });
-
-        isProbingRef.current = false;
-        return true;
-      } else {
-        setLocalAgent((prev) => ({
-          ...prev,
-          status: 'disconnected',
-          error: probe.error || 'Local PC Agent is offline on 127.0.0.1:8008',
-          data: null,
-          hardware: null,
-          models: [],
-          runtimes: null,
-          metrics: null,
-        }));
-        isProbingRef.current = false;
-        return false;
       }
     } catch (err: any) {
-      setLocalAgent((prev) => ({
-        ...prev,
-        status: 'disconnected',
-        error: err.message || 'Connection failed',
-        data: null,
-        hardware: null,
-        models: [],
-        runtimes: null,
-        metrics: null,
-      }));
-      isProbingRef.current = false;
-      return false;
+      console.warn('Direct browser detection note:', err?.message || err);
+    } finally {
+      setIsDetecting(false);
     }
-  }, []);
-
-  const setLocalAgentUrl = useCallback((url: string) => {
-    localAgentApi.setUrl(url);
-    setLocalAgent((prev) => ({ ...prev, url }));
   }, []);
 
   // Fetch Server Configuration
@@ -176,6 +177,9 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
       }
       if (cfgData.active_model_id && !activeModelId) {
         setActiveModelId(cfgData.active_model_id);
+      }
+      if (cfgData.active_runtime) {
+        setPreferredRuntime(cfgData.active_runtime);
       }
 
       if (isOriginLocalRef.current) {
@@ -200,63 +204,55 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
       } catch (err: any) {
         console.warn('Local hardware fetch note:', err.message);
       }
-    } else {
-      // Refresh local agent hardware if connected
-      if (localAgentRef.current.status === 'connected') {
-        try {
-          const hw = await localAgentApi.getHardware();
-          setLocalAgent((prev) => ({ ...prev, hardware: hw }));
-        } catch (err: any) {
-          console.warn('Hardware refresh error:', err.message);
-        }
-      }
     }
-  }, []);
+    // Also re-run browser detection
+    await runDirectDetection();
+  }, [runDirectDetection]);
 
   const refreshModels = useCallback(async () => {
     if (isOriginLocalRef.current) {
       try {
         const data = await api.getModels();
-        setLocalAgent((prev) => ({ ...prev, models: data.models || [] }));
+        setServerModels(data.models || []);
         if (data.active_model_id) {
           setActiveModelId(data.active_model_id);
         }
       } catch (err: any) {
         console.warn('Models fetch note:', err.message);
       }
-    } else {
-      if (localAgentRef.current.status === 'connected') {
-        try {
-          const data = await localAgentApi.getModels();
-          setLocalAgent((prev) => ({ ...prev, models: data.models || [] }));
-          if (data.active_model_id) {
-            setActiveModelId(data.active_model_id);
-          }
-        } catch (err: any) {
-          console.warn('Models refresh error:', err.message);
-        }
-      }
     }
+    // Also re-check local Ollama models directly
+    try {
+      const ollamaData = await detectLocalOllamaDirect();
+      setClientRuntimes((prev) => {
+        if (!prev) return null;
+        return { ...prev, ollama: ollamaData };
+      });
+    } catch {}
   }, []);
 
   const refreshRuntimes = useCallback(async () => {
     if (isOriginLocalRef.current) {
       try {
         const data = await api.getRuntimes();
-        setLocalAgent((prev) => ({ ...prev, runtimes: data }));
+        setServerRuntimes(data);
       } catch (err: any) {
         console.warn('Runtimes fetch note:', err.message);
       }
-    } else {
-      if (localAgentRef.current.status === 'connected') {
-        try {
-          const data = await localAgentApi.getRuntimes();
-          setLocalAgent((prev) => ({ ...prev, runtimes: data }));
-        } catch (err: any) {
-          console.warn('Runtimes refresh error:', err.message);
-        }
-      }
     }
+    // Also re-probe local Ollama and llama.cpp directly
+    const [ollamaRes, llamaRes] = await Promise.allSettled([
+      detectLocalOllamaDirect(),
+      detectLocalLlamaCppDirect(),
+    ]);
+    setClientRuntimes((prev) => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        ollama: ollamaRes.status === 'fulfilled' ? ollamaRes.value : prev.ollama,
+        llama_cpp: llamaRes.status === 'fulfilled' ? llamaRes.value : prev.llama_cpp,
+      };
+    });
   }, []);
 
   const refreshConfig = useCallback(async () => {
@@ -266,65 +262,88 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
   const refreshAll = useCallback(async () => {
     setIsLoading(true);
     await refreshServerData();
-    if (isOriginLocalRef.current) {
-      await Promise.allSettled([refreshHardware(), refreshRuntimes(), refreshModels()]);
-    } else {
-      await checkLocalAgent();
-    }
+    await Promise.allSettled([
+      runDirectDetection(),
+      refreshModels(),
+      refreshRuntimes(),
+    ]);
     setIsLoading(false);
-  }, [refreshServerData, refreshHardware, refreshRuntimes, refreshModels, checkLocalAgent]);
+  }, [refreshServerData, runDirectDetection, refreshModels, refreshRuntimes]);
 
-  // Determine whether running in a hosted environment
   const isHosted = !isOriginLocal;
 
-  // Active Effective Hardware:
-  // The Local PC Agent is the ONLY source for user hardware information!
+  // Effective Active Hardware:
+  // When hosted, NEVER show Render / cloud server specs! Always present detected client hardware.
+  // When local origin, present the physical server hardware.
   const effectiveHardware: HardwareProfile | null = isOriginLocal
-    ? (localAgent.hardware || serverHardware)
-    : localAgent.status === 'connected'
-    ? localAgent.hardware
+    ? serverHardware || (clientHardware ? buildClientHardwareProfile(clientHardware) : null)
+    : clientHardware
+    ? buildClientHardwareProfile(clientHardware)
     : null;
 
-  // Active Effective Models:
+  // Effective Active Models:
+  // Combine server models with directly discovered local Ollama models (deduplicated)
+  const directOllamaModels = clientRuntimes?.ollama?.models || [];
   const effectiveModels: ModelEntry[] = isOriginLocal
-    ? localAgent.models.length > 0
-      ? localAgent.models
-      : []
-    : localAgent.status === 'connected'
-    ? localAgent.models
-    : [];
+    ? (() => {
+        const map = new Map<string, ModelEntry>();
+        for (const m of serverModels) {
+          map.set(m.id, m);
+        }
+        for (const m of directOllamaModels) {
+          if (!map.has(m.id)) {
+            map.set(m.id, m);
+          }
+        }
+        return Array.from(map.values());
+      })()
+    : directOllamaModels;
 
   const effectiveRuntimes: RuntimeStatusResponse | null = isOriginLocal
-    ? localAgent.runtimes
-    : localAgent.status === 'connected'
-    ? localAgent.runtimes
+    ? serverRuntimes || (clientRuntimes ? buildClientRuntimeStatus(clientRuntimes, preferredRuntime || 'ollama') : null)
+    : clientRuntimes
+    ? buildClientRuntimeStatus(clientRuntimes, preferredRuntime || 'ollama')
     : null;
 
   const activeModel = effectiveModels.find((m) => m.id === activeModelId);
 
-  // Derived effective runtime: Ollama models use Ollama runtime strictly
+  // Robust runtime resolution:
+  // If active model is an Ollama model, active runtime MUST be 'ollama'
+  // If active model is GGUF, active runtime is 'llama.cpp server'
   const activeRuntime =
     activeModel &&
     (activeModel.format === 'Ollama' ||
       activeModel.source === 'ollama_api' ||
+      activeModel.id.startsWith('ollama_') ||
       (activeModel.runtime_compatibility &&
         activeModel.runtime_compatibility.includes('ollama') &&
         !activeModel.runtime_compatibility.includes('llama.cpp server')))
       ? 'ollama'
-      : effectiveRuntimes?.active_runtime || serverConfig?.active_runtime || 'llama.cpp server';
+      : activeModel && activeModel.format === 'GGUF'
+      ? 'llama.cpp server'
+      : preferredRuntime || effectiveRuntimes?.active_runtime || serverConfig?.active_runtime || 'ollama';
 
   const selectModel = async (modelId: string) => {
     try {
-      if (!isOriginLocal && localAgent.status === 'connected') {
-        const res = await localAgentApi.selectModel(modelId);
-        setActiveModelId(res.active_model_id);
-        showSuccess(`Selected model: ${modelId} (${res.active_runtime})`);
-        await refreshModels();
-      } else {
+      const targetModel = effectiveModels.find((m) => m.id === modelId);
+      const isTargetOllama =
+        targetModel &&
+        (targetModel.format === 'Ollama' ||
+          targetModel.source === 'ollama_api' ||
+          targetModel.id.startsWith('ollama_'));
+
+      if (isOriginLocal) {
         const res = await api.selectModel(modelId);
         setActiveModelId(res.active_model_id);
+        setPreferredRuntime(res.active_runtime || (isTargetOllama ? 'ollama' : 'llama.cpp server'));
         showSuccess(`Selected model: ${res.model?.name || modelId} (${res.active_runtime})`);
         await Promise.allSettled([refreshModels(), refreshRuntimes()]);
+      } else {
+        // Direct client selection
+        setActiveModelId(modelId);
+        const resolvedRuntime = isTargetOllama ? 'ollama' : 'llama.cpp server';
+        setPreferredRuntime(resolvedRuntime);
+        showSuccess(`Selected model: ${targetModel?.name || modelId} (${resolvedRuntime})`);
       }
     } catch (err: any) {
       showError(err.message || 'Failed to select model');
@@ -334,9 +353,14 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
 
   const switchRuntime = async (runtime: string) => {
     try {
-      const res = await api.switchRuntime(runtime);
-      showSuccess(`Active runtime switched to: ${res.active_runtime}`);
-      await refreshRuntimes();
+      setPreferredRuntime(runtime);
+      if (isOriginLocal) {
+        const res = await api.switchRuntime(runtime);
+        showSuccess(`Active runtime switched to: ${res.active_runtime}`);
+        await refreshRuntimes();
+      } else {
+        showSuccess(`Active runtime switched to: ${runtime}`);
+      }
     } catch (err: any) {
       showError(err.message || 'Failed to switch runtime');
       throw err;
@@ -349,26 +373,16 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Live telemetry polling: strictly active ONLY when connected
+  // Live telemetry polling for local server
   useEffect(() => {
-    // If not connected and not local origin, DO NOT poll at all (stops repeated polling)
-    if (!isOriginLocal && localAgent.status !== 'connected') {
-      return;
-    }
+    if (!isOriginLocal) return;
 
     let mounted = true;
     const poll = async () => {
       try {
-        if (!isOriginLocal && localAgent.status === 'connected') {
-          const m = await localAgentApi.getMetrics();
-          if (mounted) {
-            setLocalAgent((prev) => ({ ...prev, metrics: m }));
-          }
-        } else if (isOriginLocal) {
-          const m = await api.getMetrics();
-          if (mounted) {
-            setLocalAgent((prev) => ({ ...prev, metrics: m }));
-          }
+        const m = await api.getMetrics();
+        if (mounted) {
+          setServerMetrics(m);
         }
       } catch {
         // silent polling catch
@@ -381,7 +395,7 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
       mounted = false;
       clearInterval(interval);
     };
-  }, [isOriginLocal, localAgent.status]);
+  }, [isOriginLocal]);
 
   return (
     <EngineContext.Provider
@@ -393,20 +407,21 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
         runtimes: effectiveRuntimes,
         activeRuntime,
         config: serverConfig,
-        metrics: localAgent.metrics,
+        metrics: serverMetrics,
         isLoading,
+        isDetecting,
 
         isOriginLocal,
         isHosted,
-        localAgent,
+        clientHardware,
+        clientRuntimes,
 
         refreshHardware,
         refreshModels,
         refreshRuntimes,
         refreshConfig,
         refreshAll,
-        checkLocalAgent,
-        setLocalAgentUrl,
+        refreshClientDetection: runDirectDetection,
         selectModel,
         switchRuntime,
       }}

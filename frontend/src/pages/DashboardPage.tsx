@@ -41,13 +41,12 @@ export function DashboardPage() {
     metrics,
     refreshRuntimes,
     refreshModels,
-    localAgent,
   } = useEngine();
 
   const [isStarting, setIsStarting] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
 
-  // Whether we have verified local hardware (via local agent or running locally)
+  // Whether we have verified local hardware
   const hasHardware = Boolean(hardware);
 
   // CPU / RAM values from live metrics or hardware fallback
@@ -146,7 +145,7 @@ export function DashboardPage() {
                 {hasHardware ? `${cpuPercent}%` : '—'}
               </span>
               <span className="text-xs text-muted-foreground truncate max-w-[120px]" title={hardware?.cpu?.name}>
-                {hasHardware ? hardware?.cpu?.name?.split(' ')[0] || 'Processor' : 'Local Agent Offline'}
+                {hasHardware ? hardware?.cpu?.name?.split(' ')[0] || 'Processor' : 'Hardware Unavailable'}
               </span>
             </div>
             <Progress value={cpuPercent} indicatorColor={cpuPercent > 85 ? 'bg-rose-500' : 'bg-primary'} />
@@ -405,7 +404,7 @@ export function DashboardPage() {
                 ) : (
                   <div className="p-3 rounded-lg border border-dashed border-border bg-muted/20 text-center text-xs text-muted-foreground">
                     {!hasHardware
-                      ? 'Local drives not detected. Connect the Local PC Agent to view C:\\ and D:\\ drives.'
+                      ? 'Local drive partitions unavailable in browser sandbox.'
                       : 'No storage volumes detected.'}
                   </div>
                 )}
@@ -425,7 +424,7 @@ export function DashboardPage() {
                 <p className="text-[11px] text-muted-foreground leading-relaxed">
                   {hasHardware
                     ? `Available physical RAM (${ramFreeGb.toFixed(1)} GB of ${ramTotalGb.toFixed(0)} GB) provides stable operating headroom. Weights paging via mmap is activated to prevent out-of-memory faults during long context generation.`
-                    : 'Connect the local hardware agent to calculate accurate working memory safety margins for your physical workstation.'}
+                    : 'Direct hardware detection is active. Run the engine backend locally on localhost:8000 for exact physical memory tracking.'}
                 </p>
               </div>
             </CardContent>

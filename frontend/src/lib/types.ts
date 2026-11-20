@@ -1,48 +1,7 @@
-export interface LocalAgentQuickSpec {
-  cpu: string;
-  cores: number;
-  threads: number;
-  ram_total_gb: number;
-  ram_free_gb: number;
-  gpu: string;
-  vram: string;
-}
-
-export interface LocalAgentStatusResponse {
-  status: string;
-  service: string;
-  connected: boolean;
-  role: string;
-  version: string;
-  port?: number;
-  host?: string;
-  agent_url?: string;
-  timestamp: number;
-  machine: {
-    hostname: string;
-    os: string;
-    architecture: string;
-    python_version: string;
-  };
-  quick_spec: LocalAgentQuickSpec;
-  runtimes_summary?: {
-    ollama_detected?: boolean;
-    ollama_url?: string;
-    ollama_version?: string;
-    llama_cpp_detected?: boolean;
-  };
-}
-
-export interface LocalAgentState {
-  status: 'checking' | 'connected' | 'disconnected';
-  url: string;
-  data: LocalAgentStatusResponse | null;
-  error?: string;
-  hardware: HardwareProfile | null;
-  models: ModelEntry[];
-  runtimes: RuntimeStatusResponse | null;
-  metrics: LiveMetrics | null;
-}
+export type {
+  ClientDetectedHardware,
+  ClientDetectedRuntimes,
+} from './browserDetection';
 
 export interface DeploymentInfo {
   is_hosted: boolean;
@@ -354,29 +313,4 @@ export interface SetupProgress {
   error?: string;
 }
 
-export interface AgentInstallerItem {
-  os: string;
-  name: string;
-  available: boolean;
-  status?: string;
-  filename?: string;
-  download_url?: string;
-  direct_url?: string;
-  size_formatted?: string;
-  format?: string;
-  badge?: string;
-  auto_start?: boolean;
-  instructions?: string[];
-  message?: string;
-}
 
-export interface AgentInstallersResponse {
-  status: string;
-  version: string;
-  installers: {
-    windows: AgentInstallerItem;
-    linux: AgentInstallerItem;
-    macos: AgentInstallerItem;
-    [key: string]: AgentInstallerItem;
-  };
-}

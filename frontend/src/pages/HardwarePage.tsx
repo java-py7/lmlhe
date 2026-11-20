@@ -10,6 +10,8 @@ import {
   Laptop,
   Terminal,
   RefreshCw,
+  Globe,
+  Zap,
 } from 'lucide-react';
 import { useEngine } from '@/lib/context';
 import { useToast } from '@/lib/toast';
@@ -21,26 +23,21 @@ import { Badge } from '@/components/ui/badge';
 import { Select } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import { Progress } from '@/components/ui/progress';
-import { AgentDownloadCard } from '@/components/agent/AgentDownloadCard';
 
 export function HardwarePage() {
-  const { showSuccess, showError, showInfo } = useToast();
+  const { showSuccess, showError } = useToast();
   const {
     hardware,
     models,
     activeModelId,
     config,
     refreshConfig,
-    localAgent,
-    checkLocalAgent,
-    setLocalAgentUrl,
+    clientHardware,
+    clientRuntimes,
+    refreshClientDetection,
+    isDetecting,
+    isOriginLocal,
   } = useEngine();
-
-  // Local agent URL input state
-  const [agentUrlInput, setAgentUrlInput] = useState(
-    localAgent.url && !localAgent.url.includes(':8000') ? localAgent.url : 'http://127.0.0.1:8008'
-  );
-  const [isProbing, setIsProbing] = useState(false);
 
   // Calculator state
   const [selectedModelId, setSelectedModelId] = useState(activeModelId || '');
@@ -48,7 +45,7 @@ export function HardwarePage() {
   const [recommendation, setRecommendation] = useState<any | null>(null);
   const [isApplying, setIsApplying] = useState(false);
 
-  const hasHardware = Boolean(hardware);
+  const hasHardware = Boolean(hardware || clientHardware);
 
   useEffect(() => {
     if (activeModelId && !selectedModelId) {
@@ -56,13 +53,13 @@ export function HardwarePage() {
     }
   }, [activeModelId, selectedModelId]);
 
-  // Query configuration recommendation when model or context changes
+  // Query configuration recommendation when model or context changes (if backend supports it)
   useEffect(() => {
-    if (!selectedModelId) return;
+    if (!selectedModelId || !isOriginLocal) return;
     api.recommendConfig(selectedModelId, contextLength)
       .then(setRecommendation)
       .catch((err) => console.warn('Recommendation calc error:', err.message));
-  }, [selectedModelId, contextLength]);
+  }, [selectedModelId, contextLength, isOriginLocal]);
 
   const handleApplyConfig = async () => {
     if (!recommendation?.recommendations || !config) return;
@@ -91,23 +88,6 @@ export function HardwarePage() {
     }
   };
 
-  const handleConnectAgent = async () => {
-    setIsProbing(true);
-    showInfo(`Probing local agent at ${agentUrlInput}...`);
-    try {
-      const ok = await checkLocalAgent(agentUrlInput.trim());
-      if (ok) {
-        showSuccess('Successfully connected to local PC agent!');
-      } else {
-        showError('Local agent not found. Ensure LMLHE-Agent.exe has been started on your computer.');
-      }
-    } catch (err: any) {
-      showError(err.message || 'Connection failed');
-    } finally {
-      setIsProbing(false);
-    }
-  };
-
   // Safety margin evaluation
   const safety = recommendation?.safety_margin;
   const isExceeds = safety?.safety_tier === 'EXCEEDS';
@@ -123,290 +103,285 @@ export function HardwarePage() {
             Hardware Architecture & Engine Profiler
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Physical workstation topologies, memory allocation safety, and runtime telemetry
+            Direct browser capability detection, hardware topologies, and memory safety margins
           </p>
         </div>
 
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => refreshClientDetection()}
+            disabled={isDetecting}
+            className="text-xs h-8 gap-1.5"
+          >
+            <RefreshCw className={cn('w-3.5 h-3.5', isDetecting && 'animate-spin')} />
+            {isDetecting ? 'Detecting...' : 'Re-Detect Hardware'}
+          </Button>
+
           <Badge
             variant={hasHardware ? 'success' : 'outline'}
             className="text-[10px] uppercase font-bold"
           >
-            {hasHardware ? 'LOCAL WORKSTATION' : 'LOCAL AGENT OFFLINE'}
+            {isOriginLocal ? 'LOCAL WORKSTATION' : 'DIRECT CLIENT DETECTION'}
           </Badge>
         </div>
       </div>
 
-      {/* If Local Agent is Offline, Show Standalone Installer Distribution Card */}
-      {!hasHardware ? (
-        <AgentDownloadCard />
-      ) : (
-        /* Physical Workstation Hardware Profiles & Bottlenecks */
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Full Hardware Profile */}
-          <Card>
+      {/* Hardware Profiles Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Full Detected Hardware Profile */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <Cpu className="w-4 h-4 text-primary" />
+                Detected Hardware Topologies
+              </CardTitle>
+              <Badge variant="outline" className="text-[10px]">
+                {isOriginLocal ? 'SYSTEM TELEMETRY' : 'BROWSER APIS'}
+              </Badge>
+            </div>
+            <CardDescription>
+              {isOriginLocal
+                ? 'Comprehensive system architecture and physical hardware telemetry'
+                : 'Directly detected via WebGL unmasked renderer, deviceMemory, and WebGPU APIs'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2.5 text-xs">
+            <div className="flex justify-between py-1.5 border-b border-border">
+              <span className="text-muted-foreground">Host Operating System / Platform</span>
+              <span className="font-medium text-foreground">
+                {hardware?.os?.system || clientHardware?.platform?.os || 'Detected Client'} ({hardware?.os?.machine || clientHardware?.cpu?.architecture || 'x86_64'})
+              </span>
+            </div>
+            <div className="flex justify-between py-1.5 border-b border-border">
+              <span className="text-muted-foreground">Browser Client</span>
+              <span className="font-mono text-foreground">
+                {clientHardware?.platform?.browser || 'Browser Sandbox'}
+              </span>
+            </div>
+            <div className="flex justify-between py-1.5 border-b border-border">
+              <span className="text-muted-foreground">Processor / Threads</span>
+              <span className="font-medium text-foreground">
+                {hardware?.cpu?.name || clientHardware?.cpu?.name || 'Host Processor'}
+              </span>
+            </div>
+            <div className="flex justify-between py-1.5 border-b border-border">
+              <span className="text-muted-foreground">Thread Topology</span>
+              <span className="font-mono text-foreground">
+                {hardware?.cpu?.physical_cores ? `${hardware.cpu.physical_cores} Physical Cores | ` : ''}
+                {hardware?.cpu?.logical_threads || clientHardware?.cpu?.logical_threads || 1} Logical Threads
+              </span>
+            </div>
+            <div className="flex justify-between py-1.5 border-b border-border">
+              <span className="text-muted-foreground">System RAM</span>
+              <span className="font-mono text-foreground">
+                {hardware?.ram?.total_gb
+                  ? `${hardware.ram.total_gb.toFixed(1)} GB (${hardware.ram.available_gb.toFixed(1)} GB free)`
+                  : clientHardware?.ram?.total_formatted || 'Unavailable (Browser sandbox)'}
+              </span>
+            </div>
+            <div className="flex justify-between py-1.5 border-b border-border">
+              <span className="text-muted-foreground">Graphics Hardware (GPU)</span>
+              <span className="font-medium text-foreground">
+                {hardware?.gpu?.detected
+                  ? hardware.gpu.name
+                  : clientHardware?.gpu?.detected
+                  ? clientHardware.gpu.name
+                  : 'CPU / Integrated Graphics'}
+              </span>
+            </div>
+            <div className="flex justify-between py-1.5 border-b border-border">
+              <span className="text-muted-foreground">Dedicated VRAM</span>
+              <span className="font-mono text-foreground">
+                {hardware?.gpu?.dedicated_vram_formatted || clientHardware?.gpu?.dedicated_vram_formatted || 'Unavailable (CPU GEMM)'}
+              </span>
+            </div>
+            <div className="flex justify-between py-1.5">
+              <span className="text-muted-foreground">WebGPU Acceleration</span>
+              <span className="font-mono text-foreground">
+                {clientHardware?.capabilities?.webgpu
+                  ? `Supported (${clientHardware.webgpu.adapter_name || 'Hardware Device'})`
+                  : 'Not Available in Current Browser'}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Qualitative Bottleneck Analysis */}
+        <Card className="flex flex-col justify-between">
+          <div>
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                  <Cpu className="w-4 h-4 text-primary" />
-                  Physical Hardware Topologies
-                </CardTitle>
-                <Badge variant="outline" className="text-[10px]">
-                  LOCAL WORKSTATION
-                </Badge>
-              </div>
-              <CardDescription>Comprehensive system architecture and physical hardware detection</CardDescription>
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <Database className="w-4 h-4 text-primary" />
+                Hardware Bottleneck Analysis
+              </CardTitle>
+              <CardDescription>Qualitative engineering assessment for local inference</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-2.5 text-xs">
-              <div className="flex justify-between py-1.5 border-b border-border">
-                <span className="text-muted-foreground">Host Operating System</span>
-                <span className="font-medium text-foreground">
-                  {hardware?.os?.system} {hardware?.os?.release} ({hardware?.os?.machine})
-                </span>
+            <CardContent className="space-y-4 text-xs leading-relaxed text-muted-foreground">
+              <div className="p-3.5 rounded-lg border border-border bg-muted/30 text-foreground space-y-2">
+                <div className="font-semibold text-xs flex items-center gap-1.5 text-primary">
+                  <ShieldCheck className="w-4 h-4" />
+                  Compute & Memory Bus Architecture
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Detected {hardware?.cpu?.name || clientHardware?.cpu?.name} with {hardware?.cpu?.logical_threads || clientHardware?.cpu?.logical_threads || 4} threads.
+                  {hardware?.gpu?.name?.includes('730') || clientHardware?.gpu?.name?.includes('730')
+                    ? ' NVIDIA GeForce GT 730 detected. This Kepler-architecture GPU supports partial layer offloading, but unified CPU threading provides the dependable primary compute backbone.'
+                    : hardware?.gpu?.detected || clientHardware?.gpu?.detected
+                    ? ` GPU detected: ${hardware?.gpu?.name || clientHardware?.gpu?.name}. Hardware acceleration is available for supported runtimes.`
+                    : ' No dedicated discrete GPU detected. Highly-optimized CPU thread pooling provides stable and dependable inference.'}
+                </p>
               </div>
-              <div className="flex justify-between py-1.5 border-b border-border">
-                <span className="text-muted-foreground">Python Runtime</span>
-                <span className="font-mono text-foreground">Python {hardware?.os?.python_version}</span>
-              </div>
-              <div className="flex justify-between py-1.5 border-b border-border">
-                <span className="text-muted-foreground">Processor Brand</span>
-                <span className="font-medium text-foreground">{hardware?.cpu?.name}</span>
-              </div>
-              <div className="flex justify-between py-1.5 border-b border-border">
-                <span className="text-muted-foreground">Core / Thread Topologies</span>
-                <span className="font-mono text-foreground">
-                  {hardware?.cpu?.physical_cores} Physical Cores | {hardware?.cpu?.logical_threads} Threads
-                </span>
-              </div>
-              <div className="flex justify-between py-1.5 border-b border-border">
-                <span className="text-muted-foreground">Processor Frequency</span>
-                <span className="font-mono text-foreground">
-                  {hardware?.cpu?.frequency_mhz?.current ? `${Math.round(hardware.cpu.frequency_mhz.current)} MHz` : 'Dynamic Base'}
-                </span>
-              </div>
-              <div className="flex justify-between py-1.5 border-b border-border">
-                <span className="text-muted-foreground">Total System RAM</span>
-                <span className="font-mono text-foreground">
-                  {(hardware?.ram?.total_gb ?? 0).toFixed(1)} GB ({(hardware?.ram?.available_gb ?? 0).toFixed(1)} GB available)
-                </span>
-              </div>
-              <div className="flex justify-between py-1.5 border-b border-border">
-                <span className="text-muted-foreground">Graphics Hardware (GPU)</span>
-                <span className="font-medium text-foreground">
-                  {hardware?.gpu?.detected ? hardware.gpu.name : 'CPU / Integrated Graphics'}
-                </span>
-              </div>
-              <div className="flex justify-between py-1.5 border-b border-border">
-                <span className="text-muted-foreground">Dedicated VRAM</span>
-                <span className="font-mono text-foreground">
-                  {hardware?.gpu?.dedicated_vram_formatted || 'Unavailable (CPU GEMM)'}
-                </span>
-              </div>
-              <div className="flex justify-between py-1.5">
-                <span className="text-muted-foreground">Shared Video Memory Pool</span>
-                <span className="font-mono text-foreground">
-                  {hardware?.gpu?.shared_vram_formatted || 'Standard Host RAM'}
-                </span>
+
+              {/* Browser Capabilities Checklist */}
+              <div className="p-3.5 rounded-lg border border-border bg-card space-y-2">
+                <div className="font-semibold text-xs text-foreground flex items-center gap-1.5">
+                  <Globe className="w-4 h-4 text-primary" />
+                  Client Browser Runtime Capabilities
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-[11px]">
+                  <div className="flex items-center gap-1.5">
+                    <span className={cn('w-2 h-2 rounded-full', clientHardware?.capabilities?.webassembly ? 'bg-emerald-500' : 'bg-rose-500')} />
+                    <span>WebAssembly (Wasm)</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className={cn('w-2 h-2 rounded-full', clientHardware?.capabilities?.webgl2 ? 'bg-emerald-500' : 'bg-rose-500')} />
+                    <span>WebGL 2.0</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className={cn('w-2 h-2 rounded-full', clientHardware?.capabilities?.webgpu ? 'bg-emerald-500' : 'bg-muted-foreground')} />
+                    <span>WebGPU API</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className={cn('w-2 h-2 rounded-full', clientHardware?.capabilities?.web_workers ? 'bg-emerald-500' : 'bg-rose-500')} />
+                    <span>Web Workers</span>
+                  </div>
+                </div>
               </div>
             </CardContent>
-          </Card>
+          </div>
+        </Card>
+      </div>
 
-          {/* Qualitative Bottleneck Analysis */}
-          <Card className="flex flex-col justify-between">
-            <div>
-              <CardHeader>
-                <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                  <Database className="w-4 h-4 text-primary" />
-                  Hardware Bottleneck Analysis
-                </CardTitle>
-                <CardDescription>Qualitative engineering assessment for local inference</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4 text-xs leading-relaxed text-muted-foreground">
-                <div className="p-3.5 rounded-lg border border-border bg-muted/30 text-foreground space-y-2">
-                  <div className="font-semibold text-xs flex items-center gap-1.5 text-primary">
-                    <ShieldCheck className="w-4 h-4" />
-                    Compute & Memory Bus Architecture
-                  </div>
-                  <p className="text-[11px] text-muted-foreground">
-                    Detected {hardware?.cpu?.name} with {hardware?.cpu?.physical_cores} physical cores and {(hardware?.ram?.total_gb ?? 0).toFixed(1)} GB RAM.
-                    {!hardware?.gpu?.detected || !hardware?.gpu?.dedicated_vram_bytes || hardware.gpu.dedicated_vram_bytes < 1024 * 1024 * 1024
-                      ? ' No high-bandwidth discrete GPU detected. CPU GEMM execution with thread pooling provides the dependable, stable inference baseline.'
-                      : hardware.gpu.dedicated_vram_bytes >= 6 * 1024 * 1024 * 1024
-                      ? ` High-capacity discrete GPU (${hardware.gpu.name}) detected with ${hardware.gpu.dedicated_vram_formatted} VRAM. Full or extensive layer offloading is supported.`
-                      : ` Mid-tier or legacy discrete GPU (${hardware.gpu.name}) detected with ${hardware.gpu.dedicated_vram_formatted} VRAM. Partial offloading is dynamically balanced to avoid PCIe bus stalls.`}
-                  </p>
-                </div>
-
-                {/* Memory tier guidelines */}
-                <div className="space-y-2 pt-1 text-[11px]">
-                  <div className="font-medium text-foreground">Engine Inference Recommendations:</div>
-                  <ul className="list-disc list-inside space-y-1.5 text-muted-foreground pl-1">
-                    <li><strong>Quantization:</strong> Q4_K_M or Q4_0 provides the best balance of perplexity retention and cache efficiency.</li>
-                    <li><strong>Thread Count:</strong> Set threads equal to physical core count ({hardware?.cpu?.physical_cores || 4}) to avoid hyperthreading context thrashing.</li>
-                    <li><strong>Memory Paging:</strong> Always enable memory mapping (<code className="text-primary font-mono">--mmap</code>) to allow virtual memory offload.</li>
-                  </ul>
-                </div>
-              </CardContent>
-            </div>
-          </Card>
-        </div>
-      )}
-
-      {/* Memory Safety & Context Calculator */}
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div>
+      {/* Interactive Memory & Engine Parameter Calculator (Local Origin) */}
+      {isOriginLocal && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
                 <Sliders className="w-4 h-4 text-primary" />
-                Memory Safety & Context Window Calculator
+                Interactive Engine Parameter & Memory Safety Calculator
               </CardTitle>
-              <CardDescription>
-                Simulate working memory requirements for different context lengths before execution
-              </CardDescription>
-            </div>
-            {safety && (
-              <Badge
-                variant={isExceeds ? 'destructive' : isMarginal ? 'warning' : 'success'}
-                className="text-[10px] uppercase font-mono self-start sm:self-auto"
-              >
-                {safety.safety_tier}
+              <Badge variant="outline" className="text-[10px]">
+                OFFLINE FORMULAE
               </Badge>
-            )}
-          </div>
-        </CardHeader>
-
-        <CardContent className="space-y-6">
-          {/* Controls row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 rounded-xl bg-muted/20 border border-border">
-            {/* Model Selector */}
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-foreground">Target Model</label>
-              <Select
-                value={selectedModelId}
-                onChange={(e) => setSelectedModelId(e.target.value)}
-              >
-                {models.length > 0 ? (
-                  models.map((m) => (
+            </div>
+            <CardDescription>
+              Predicts working set RAM/VRAM allocations and determines exact optimal thread/layer parameters
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Target Model Selection */}
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-foreground">Select Evaluated Model</label>
+                <Select
+                  value={selectedModelId}
+                  onChange={(e) => setSelectedModelId(e.target.value)}
+                  className="text-xs"
+                >
+                  <option value="">Choose a model...</option>
+                  {models.map((m) => (
                     <option key={m.id} value={m.id}>
                       {m.name} ({m.format} - {m.size_formatted})
                     </option>
-                  ))
-                ) : (
-                  <option value="">No models discovered</option>
-                )}
-              </Select>
-            </div>
-
-            {/* Context Slider */}
-            <div className="space-y-2">
-              <div className="flex justify-between text-xs font-medium">
-                <span>Context Window Size</span>
-                <span className="font-mono text-primary font-semibold">{contextLength.toLocaleString()} tokens</span>
+                  ))}
+                </Select>
               </div>
-              <Slider
-                min={512}
-                max={32768}
-                step={512}
-                value={contextLength}
-                onValueChange={setContextLength}
-              />
-              <div className="flex justify-between text-[10px] text-muted-foreground font-mono">
-                <span>512</span>
-                <span>4,096</span>
-                <span>8,192</span>
-                <span>16,384</span>
-                <span>32,768</span>
+
+              {/* Target Context Window */}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-medium text-foreground">Context Window Size</span>
+                  <span className="font-mono text-muted-foreground">{contextLength} tokens</span>
+                </div>
+                <Slider
+                  min={512}
+                  max={8192}
+                  step={512}
+                  value={contextLength}
+                  onValueChange={(val) => setContextLength(val)}
+                />
               </div>
             </div>
-          </div>
 
-          {/* Calculator Output Grid */}
-          {recommendation && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div className="p-3 rounded-lg border border-border bg-card">
-                  <span className="text-[11px] text-muted-foreground block">Model Weights</span>
-                  <span className="text-base font-bold font-mono text-foreground">
-                    {(safety?.weights_memory_gb ?? 0).toFixed(2)} GB
-                  </span>
-                </div>
-                <div className="p-3 rounded-lg border border-border bg-card">
-                  <span className="text-[11px] text-muted-foreground block">KV Cache Buffer</span>
-                  <span className="text-base font-bold font-mono text-foreground">
-                    {(safety?.kv_cache_memory_gb ?? 0).toFixed(2)} GB
-                  </span>
-                </div>
-                <div className="p-3 rounded-lg border border-border bg-card">
-                  <span className="text-[11px] text-muted-foreground block">Total Working RAM</span>
-                  <span className="text-base font-bold font-mono text-primary">
-                    {(safety?.estimated_working_memory_gb ?? 0).toFixed(2)} GB
-                  </span>
-                </div>
-                <div className="p-3 rounded-lg border border-border bg-card">
-                  <span className="text-[11px] text-muted-foreground block">Available RAM</span>
-                  <span className="text-base font-bold font-mono text-foreground">
-                    {(hardware?.ram?.available_gb ?? 0).toFixed(1)} GB
-                  </span>
-                </div>
-              </div>
-
-              {/* Safety notice */}
-              <div
-                className={cn(
-                  'p-3.5 rounded-lg border text-xs flex items-start gap-2.5',
-                  isExceeds
-                    ? 'border-rose-500/30 bg-rose-500/10 text-rose-300'
-                    : isMarginal
-                    ? 'border-amber-500/30 bg-amber-500/10 text-amber-300'
-                    : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
-                )}
-              >
-                {isExceeds ? (
-                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
-                ) : (
-                  <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-400" />
-                )}
-                <div className="space-y-0.5">
-                  <div className="font-semibold">
-                    {isExceeds ? 'High Memory Safety Risk' : isMarginal ? 'Marginal Memory Safety' : 'Safe Operating Margin'}
-                  </div>
-                  <p className="text-[11px] opacity-90 leading-relaxed">{safety?.message}</p>
-                </div>
-              </div>
-
-              {/* Recommended parameter buttons */}
-              {recommendation.recommendations && (
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-xl border border-border bg-muted/20">
-                  <div className="text-xs space-y-1">
-                    <div className="font-medium text-foreground">Optimal Parameters for this Model & Context:</div>
-                    <div className="font-mono text-[11px] text-muted-foreground">
-                      -t {recommendation.recommendations.threads} | -ngl {recommendation.recommendations.gpu_layers} | -c {recommendation.recommendations.context_size} | {recommendation.recommendations.use_mmap ? '--mmap' : '--no-mmap'}
+            {/* Recommendation & Safety Results */}
+            {recommendation && (
+              <div className="pt-4 border-t border-border space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="p-3.5 rounded-lg border border-border bg-card">
+                    <div className="text-[11px] text-muted-foreground">Estimated Working Memory</div>
+                    <div className="text-base font-bold font-mono text-foreground mt-0.5">
+                      {safety?.working_memory_gb ? `${safety.working_memory_gb.toFixed(2)} GB` : '—'}
                     </div>
                   </div>
-                  <Button
-                    size="sm"
-                    onClick={handleApplyConfig}
-                    disabled={isApplying}
-                    className="shrink-0 text-xs"
-                  >
-                    Apply & Save Parameters
-                  </Button>
+                  <div className="p-3.5 rounded-lg border border-border bg-card">
+                    <div className="text-[11px] text-muted-foreground">Available System RAM</div>
+                    <div className="text-base font-bold font-mono text-foreground mt-0.5">
+                      {safety?.available_ram_gb ? `${safety.available_ram_gb.toFixed(2)} GB` : '—'}
+                    </div>
+                  </div>
+                  <div className="p-3.5 rounded-lg border border-border bg-card">
+                    <div className="text-[11px] text-muted-foreground">Memory Safety Status</div>
+                    <div className="mt-0.5 flex items-center gap-1.5">
+                      <Badge
+                        variant={isExceeds ? 'destructive' : isMarginal ? 'warning' : 'success'}
+                        className="text-[10px] font-bold"
+                      >
+                        {safety?.safety_tier || 'SAFE'}
+                      </Badge>
+                    </div>
+                  </div>
                 </div>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
 
-      {/* Storage Partitions Breakdown */}
+                {recommendation.recommendations && (
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-xl border border-border bg-muted/20">
+                    <div className="text-xs space-y-1">
+                      <div className="font-medium text-foreground">Optimal Parameters for this Model & Context:</div>
+                      <div className="font-mono text-[11px] text-muted-foreground">
+                        -t {recommendation.recommendations.threads} | -ngl {recommendation.recommendations.gpu_layers} | -c {recommendation.recommendations.context_size} | {recommendation.recommendations.use_mmap ? '--mmap' : '--no-mmap'}
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={handleApplyConfig}
+                      disabled={isApplying}
+                      className="shrink-0 text-xs"
+                    >
+                      Apply & Save Parameters
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Storage & Drives */}
       <Card>
         <CardHeader>
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
             <HardDrive className="w-4 h-4 text-primary" />
             Active Storage Partitions & Disk Space
           </CardTitle>
-          <CardDescription>Verified drive space available for local GGUF models and Ollama blobs</CardDescription>
+          <CardDescription>
+            {isOriginLocal
+              ? 'Physical drives available for local GGUF models and Ollama blobs'
+              : 'Origin storage sandbox quota and local model storage availability'}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {(hardware?.storage || []).length > 0 ? (
@@ -425,9 +400,19 @@ export function HardwarePage() {
                 </div>
               ))}
             </div>
+          ) : clientHardware?.storage?.quota_formatted ? (
+            <div className="p-4 rounded-lg border border-border bg-card space-y-2">
+              <div className="flex justify-between items-center text-xs font-semibold">
+                <span>{clientHardware.storage.label}</span>
+                <Badge variant="outline" className="text-[10px]">Browser FS</Badge>
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Estimated available origin quota: <span className="font-mono text-foreground font-medium">{clientHardware.storage.quota_formatted}</span>
+              </div>
+            </div>
           ) : (
             <div className="p-4 rounded-lg border border-dashed border-border text-center text-xs text-muted-foreground">
-              Local storage partitions unavailable. Connect the local agent to inspect your PC's drives.
+              Storage partition details unavailable in browser sandbox. Run locally for physical disk inspection.
             </div>
           )}
         </CardContent>
