@@ -42,6 +42,14 @@ const GPU_SIGNATURES: GpuSignature[] = [
   { pattern: /RTX\s*2070|RTX\s*2080/i, vendor: 'nvidia', arch: 'Turing', vramGB: 8, bandwidthGBs: 448, fp16Tflops: 20 },
   { pattern: /RTX\s*2060/i, vendor: 'nvidia', arch: 'Turing', vramGB: 6, bandwidthGBs: 336, fp16Tflops: 13 },
   { pattern: /GTX\s*1660|GTX\s*1650/i, vendor: 'nvidia', arch: 'Turing', vramGB: 6, bandwidthGBs: 288, fp16Tflops: 10 },
+  { pattern: /GTX\s*1080\s*Ti/i, vendor: 'nvidia', arch: 'Pascal', vramGB: 11, bandwidthGBs: 484, fp16Tflops: 11.3 },
+  { pattern: /GTX\s*1080/i, vendor: 'nvidia', arch: 'Pascal', vramGB: 8, bandwidthGBs: 320, fp16Tflops: 8.9 },
+  { pattern: /GTX\s*1070\s*Ti|GTX\s*1070/i, vendor: 'nvidia', arch: 'Pascal', vramGB: 8, bandwidthGBs: 256, fp16Tflops: 6.5 },
+  { pattern: /GTX\s*1060/i, vendor: 'nvidia', arch: 'Pascal', vramGB: 6, bandwidthGBs: 192, fp16Tflops: 4.4 },
+  { pattern: /GTX\s*1050\s*Ti|GTX\s*1050/i, vendor: 'nvidia', arch: 'Pascal', vramGB: 4, bandwidthGBs: 112, fp16Tflops: 2.1 },
+  { pattern: /GT\s*1030/i, vendor: 'nvidia', cleanName: 'NVIDIA GeForce GT 1030', arch: 'Pascal', vramGB: 2, bandwidthGBs: 48, fp16Tflops: 1.1 },
+  { pattern: /GT\s*730/i, vendor: 'nvidia', cleanName: 'NVIDIA GeForce GT 730', arch: 'Kepler', vramGB: 2, bandwidthGBs: 40, fp16Tflops: 0.7 },
+  { pattern: /GT\s*710/i, vendor: 'nvidia', cleanName: 'NVIDIA GeForce GT 710', arch: 'Kepler', vramGB: 2, bandwidthGBs: 14, fp16Tflops: 0.4 },
   { pattern: /H100|H200/i, vendor: 'nvidia', arch: 'Hopper', vramGB: 80, bandwidthGBs: 3350, fp16Tflops: 989 },
   { pattern: /A100/i, vendor: 'nvidia', arch: 'Ampere', vramGB: 80, bandwidthGBs: 2039, fp16Tflops: 312 },
   { pattern: /RTX\s*6000\s*Ada|L40S/i, vendor: 'nvidia', arch: 'Ada Lovelace', vramGB: 48, bandwidthGBs: 864, fp16Tflops: 181 },
@@ -366,32 +374,20 @@ export async function probeSystemHardwareBackend(): Promise<SystemHardwarePayloa
   return null;
 }
 
+export function isLocalEnvironment(): boolean {
+  if (typeof window === 'undefined') return false;
+  const host = window.location.hostname;
+  return host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host.endsWith('.local');
+}
+
 export async function detectLocalComputerHardware(): Promise<LocalHardwareProfile> {
-  const [osCpu, webgpu, storageEstimate, sysData] = await Promise.all([
-    probeOsAndCpu(),
-    probeWebGPU(),
-    navigator.storage?.estimate
-      ? navigator.storage.estimate().catch(() => ({ quota: undefined, usage: undefined }))
-      : Promise.resolve({ quota: undefined, usage: undefined }),
-    probeSystemHardwareBackend(),
-  ]);
+  const isLocal = isLocalEnvironment();
 
-  const webgl = probeWebGL();
-  const rawRenderer = webgpu.adapterDescription || webgl.renderer;
-  const rawVendor = webgpu.adapterVendor || webgl.vendor;
-  const gpuMeta = inferGpuMetadata(rawRenderer, rawVendor);
+  // If running locally, attempt to query the native system hardware backend directly (node:os, CIM, nvidia-smi)
+  // When hosted on Vercel or cloud, skip querying serverless host so we detect the user's actual client machine
+  const sysData = isLocal ? await probeSystemHardwareBackend() : null;
 
-  // Browser deviceMemory is privacy-capped at 8GB in Chromium and undefined in Safari/Firefox
-  const navWithMem = navigator as Navigator & { deviceMemory?: number };
-  const browserReportedRam = navWithMem.deviceMemory;
-  const ramPrivacyCapped = !sysData && (browserReportedRam === undefined || browserReportedRam >= 8);
-
-  // Storage estimate in GB
-  const quotaGB = storageEstimate?.quota ? Number((storageEstimate.quota / 1024 ** 3).toFixed(1)) : 64;
-  const usageGB = storageEstimate?.usage ? Number((storageEstimate.usage / 1024 ** 3).toFixed(2)) : 0;
-  const browserAvailDiskGB = Math.max(4, Number((quotaGB - usageGB).toFixed(1)));
-
-  // If local engine backend provided uncapped OS hardware specs
+  // If local engine backend provided uncapped OS hardware specs (running on localhost)
   if (sysData) {
     const agentGpuMeta = inferGpuMetadata(sysData.gpuName, sysData.gpuVendor);
     const unified = sysData.unifiedMemory || agentGpuMeta.unified;
@@ -411,7 +407,7 @@ export async function detectLocalComputerHardware(): Promise<LocalHardwareProfil
       ramPrivacyCapped: false,
       gpuVendor: sysData.gpuVendor !== 'unknown' ? sysData.gpuVendor : agentGpuMeta.vendor,
       gpuName: sysData.gpuName || agentGpuMeta.cleanName,
-      gpuRendererRaw: rawRenderer,
+      gpuRendererRaw: sysData.gpuName,
       gpuArchitecture: agentGpuMeta.arch,
       vramTotalGB: unified ? Number((unifiedPool * 0.75).toFixed(1)) : sysData.vramTotalGB || agentGpuMeta.vramGB,
       vramAvailableGB: unified
@@ -424,18 +420,43 @@ export async function detectLocalComputerHardware(): Promise<LocalHardwareProfil
       diskTotalGB: sysData.diskTotalGB,
       diskAvailableGB: sysData.diskAvailableGB,
       diskProbeSource: 'native-os',
-      webgpuSupported: webgpu.supported,
-      webgpuShaderF16: webgpu.shaderF16,
-      webgpuMaxBufferMB: webgpu.maxBufferMB,
+      webgpuSupported: true,
+      webgpuShaderF16: true,
+      webgpuMaxBufferMB: 2048,
       thermalSensorAvailable: sysData.gpuTempC !== null,
       currentGpuTempC: sysData.gpuTempC,
       currentCpuTempC: sysData.gpuTempC ? Math.max(40, sysData.gpuTempC - 4) : null,
     };
   }
 
-  // Browser-native local computer detection (zero-install, works from any hosted URL)
-  // Infer sensible RAM estimate when browser caps at 8GB on high-core / Apple Silicon / discrete RTX machines
-  let estimatedRamGB = browserReportedRam ?? 16;
+  // --- Browser-Based Client Machine Hardware Detection (for Hosted Vercel / Remote Users) ---
+  // Probes client device directly using navigator.hardwareConcurrency, navigator.deviceMemory,
+  // WebGL2 unmasked renderer, WebGPU, and StorageManager.
+  const [osCpu, webgpu, storageEstimate] = await Promise.all([
+    probeOsAndCpu(),
+    probeWebGPU(),
+    navigator.storage?.estimate
+      ? navigator.storage.estimate().catch(() => ({ quota: undefined, usage: undefined }))
+      : Promise.resolve({ quota: undefined, usage: undefined }),
+  ]);
+
+  const webgl = probeWebGL();
+  const rawRenderer = webgpu.adapterDescription || webgl.renderer;
+  const rawVendor = webgpu.adapterVendor || webgl.vendor;
+  const gpuMeta = inferGpuMetadata(rawRenderer, rawVendor);
+
+  // Browser deviceMemory is privacy-capped at 8GB in Chromium (W3C standard) and undefined in Safari/Firefox
+  const navWithMem = navigator as Navigator & { deviceMemory?: number };
+  const browserReportedRam = navWithMem.deviceMemory;
+  const ramPrivacyCapped = browserReportedRam === undefined || browserReportedRam >= 8;
+
+  // Storage estimate in GB via StorageManager API
+  const quotaGB = storageEstimate?.quota ? Number((storageEstimate.quota / 1024 ** 3).toFixed(1)) : 64;
+  const usageGB = storageEstimate?.usage ? Number((storageEstimate.usage / 1024 ** 3).toFixed(2)) : 0;
+  const browserAvailDiskGB = Math.max(4, Number((quotaGB - usageGB).toFixed(1)));
+
+  // Realistic baseline for client browser: use reported memory or architecture-aware default
+  let estimatedRamGB = browserReportedRam ?? 8;
   if (gpuMeta.unified && gpuMeta.vendor === 'apple') {
     estimatedRamGB = Math.max(estimatedRamGB, gpuMeta.vramGB);
   } else if (ramPrivacyCapped) {
@@ -456,14 +477,14 @@ export async function detectLocalComputerHardware(): Promise<LocalHardwareProfil
     cpuModel: gpuMeta.vendor === 'apple' ? `${gpuMeta.arch} (${osCpu.cpuCores}-Core)` : osCpu.cpuModel,
     cpuCores: osCpu.cpuCores,
     ramTotalGB: estimatedRamGB,
-    ramAvailableGB: Number((estimatedRamGB * 0.76).toFixed(1)),
+    ramAvailableGB: Number((estimatedRamGB * 0.75).toFixed(1)),
     ramPrivacyCapped,
     gpuVendor: gpuMeta.vendor,
     gpuName: gpuMeta.cleanName,
     gpuRendererRaw: rawRenderer,
     gpuArchitecture: webgpu.adapterArch || gpuMeta.arch,
     vramTotalGB,
-    vramAvailableGB: Number((vramTotalGB * 0.88).toFixed(1)),
+    vramAvailableGB: Number((vramTotalGB * 0.85).toFixed(1)),
     unifiedMemory: gpuMeta.unified,
     unifiedMemoryPoolGB: unifiedPool,
     memoryBandwidthGBs: gpuMeta.bandwidthGBs,

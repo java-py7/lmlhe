@@ -97,7 +97,9 @@ export function HardwareProbeView({
               <strong className="font-medium text-slate-800 dark:text-slate-200">
                 {profile.detectionSource === 'browser-probe-refined'
                   ? 'Browser Local Probe + Verified Specs'
-                  : 'Hardware Probe (Native OS & Browser)'}
+                  : profile.detectionSource === 'system-hardware'
+                    ? 'Native OS Kernel Hardware (Local Machine)'
+                    : 'Browser Hardware Probe (Client Machine)'}
               </strong>
             </span>
             <span aria-hidden="true">·</span>
@@ -318,8 +320,10 @@ export function HardwareProbeView({
             </div>
             <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
               {profile.ramPrivacyCapped
-                ? 'Browser capped deviceMemory; click Verify Exact Specs if you have more.'
-                : 'Verified host memory pool available for mmap and CPU layer offload.'}
+                ? 'Browser capped navigator.deviceMemory at 8 GB; click Verify Exact Specs to refine.'
+                : profile.detectionSource === 'system-hardware'
+                  ? 'Physical OS memory pool available for mmap and CPU layer offload.'
+                  : 'Direct browser-reported memory pool.'}
             </p>
           </div>
           <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
@@ -337,6 +341,9 @@ export function HardwareProbeView({
           <div>
             <div className="text-xl font-semibold font-mono tabular-nums text-slate-900 dark:text-slate-50">
               {profile.vramTotalGB > 0 ? `${profile.vramTotalGB} GB` : '0 GB (CPU / iGPU)'}
+              {profile.detectionSource === 'browser-probe' && profile.vramTotalGB > 0 && (
+                <span className="text-xs font-normal text-slate-500 dark:text-slate-400 ml-1.5">(Profile Est.)</span>
+              )}
             </div>
             <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
               {profile.unifiedMemory
@@ -397,7 +404,11 @@ export function HardwareProbeView({
           <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
             <span>Thermal Sensors</span>
             <span className="font-mono tabular-nums">
-              {profile.currentGpuTempC !== null ? `${profile.currentGpuTempC}°C Live` : 'Hardware Sensor'}
+              {profile.currentGpuTempC !== null
+                ? `${profile.currentGpuTempC}°C Live`
+                : profile.detectionSource === 'system-hardware'
+                  ? 'Hardware Sensor'
+                  : 'Unavailable (Browser Sandbox)'}
             </span>
           </div>
         </div>
