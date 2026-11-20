@@ -37,6 +37,11 @@ export function HardwarePage() {
     refreshClientDetection,
     isDetecting,
     isOriginLocal,
+    isHosted,
+    isExactLocalEngine,
+    cpuScore,
+    isBenchmarking,
+    runSpeedTest,
   } = useEngine();
 
   // Calculator state
@@ -123,7 +128,11 @@ export function HardwarePage() {
             variant={hasHardware ? 'success' : 'outline'}
             className="text-[10px] uppercase font-bold"
           >
-            {isOriginLocal ? 'LOCAL WORKSTATION' : 'DIRECT CLIENT DETECTION'}
+            {isExactLocalEngine
+              ? 'LOCAL ENGINE (EXACT)'
+              : isOriginLocal
+              ? 'LOCAL WORKSTATION'
+              : 'BROWSER ESTIMATE (~)'}
           </Badge>
         </div>
       </div>
@@ -139,13 +148,19 @@ export function HardwarePage() {
                 Detected Hardware Topologies
               </CardTitle>
               <Badge variant="outline" className="text-[10px]">
-                {isOriginLocal ? 'SYSTEM TELEMETRY' : 'BROWSER APIS'}
+                {isExactLocalEngine
+                  ? 'LOCAL ENGINE'
+                  : isOriginLocal
+                  ? 'SYSTEM TELEMETRY'
+                  : 'BROWSER ESTIMATES (~)'}
               </Badge>
             </div>
             <CardDescription>
-              {isOriginLocal
+              {isExactLocalEngine
+                ? 'Exact physical hardware telemetry received from local engine daemon (127.0.0.1:8000)'
+                : isOriginLocal
                 ? 'Comprehensive system architecture and physical hardware telemetry'
-                : 'Directly detected via WebGL unmasked renderer, deviceMemory, and WebGPU APIs'}
+                : 'Directly detected via WebGL unmasked renderer, deviceMemory, and engineering estimates (~)'}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2.5 text-xs">
@@ -170,15 +185,33 @@ export function HardwarePage() {
             <div className="flex justify-between py-1.5 border-b border-border">
               <span className="text-muted-foreground">Thread Topology</span>
               <span className="font-mono text-foreground">
-                {hardware?.cpu?.physical_cores ? `${hardware.cpu.physical_cores} Physical Cores | ` : ''}
+                {hardware?.cpu?.physical_cores ? `~${hardware.cpu.physical_cores} Physical Cores ${isHosted && !isExactLocalEngine ? '(est.)' : ''} | ` : ''}
                 {hardware?.cpu?.logical_threads || clientHardware?.cpu?.logical_threads || 1} Logical Threads
               </span>
+            </div>
+            <div className="flex justify-between items-center py-1.5 border-b border-border">
+              <span className="text-muted-foreground">Relative CPU Speed</span>
+              <div className="flex items-center gap-2">
+                <span className="font-mono font-semibold text-foreground">
+                  {cpuScore !== null ? `${cpuScore} Mops/s` : isBenchmarking ? 'Testing...' : 'Ready'}
+                </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => runSpeedTest()}
+                  disabled={isBenchmarking}
+                  className="h-6 px-2 text-[10px] gap-1"
+                >
+                  <Zap className={cn('w-3 h-3 text-amber-500', isBenchmarking && 'animate-spin')} />
+                  {isBenchmarking ? 'Testing...' : 'Test Speed'}
+                </Button>
+              </div>
             </div>
             <div className="flex justify-between py-1.5 border-b border-border">
               <span className="text-muted-foreground">System RAM</span>
               <span className="font-mono text-foreground">
                 {hardware?.ram?.total_gb
-                  ? `${hardware.ram.total_gb.toFixed(1)} GB (${hardware.ram.available_gb.toFixed(1)} GB free)`
+                  ? `${hardware.ram.total_gb.toFixed(1)} GB (~${hardware.ram.available_gb.toFixed(1)} GB free ${isHosted && !isExactLocalEngine ? 'est.' : ''})`
                   : clientHardware?.ram?.total_formatted || 'Unavailable (Browser sandbox)'}
               </span>
             </div>
@@ -195,7 +228,7 @@ export function HardwarePage() {
             <div className="flex justify-between py-1.5 border-b border-border">
               <span className="text-muted-foreground">Dedicated VRAM</span>
               <span className="font-mono text-foreground">
-                {hardware?.gpu?.dedicated_vram_formatted || clientHardware?.gpu?.dedicated_vram_formatted || 'Unavailable (CPU GEMM)'}
+                {hardware?.gpu?.dedicated_vram_formatted || clientHardware?.gpu?.dedicated_vram_formatted || (hardware?.gpu?.detected ? 'Shared / unknown' : 'Unavailable (CPU GEMM)')}
               </span>
             </div>
             <div className="flex justify-between py-1.5">

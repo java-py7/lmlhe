@@ -15,11 +15,14 @@ import {
   Folder,
   Radio,
   FileText,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { useEngine } from '@/lib/context';
 import { useToast } from '@/lib/toast';
 import { api } from '@/lib/api';
 import { ModelEntry } from '@/lib/types';
+import { detectLocalOllamaDirect } from '@/lib/browserDetection';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -42,6 +45,8 @@ export function RuntimesPage() {
     refreshRuntimes,
     refreshConfig,
     isOriginLocal,
+    isHosted,
+    isExactLocalEngine,
     clientRuntimes,
     refreshClientDetection,
   } = useEngine();
@@ -57,6 +62,14 @@ export function RuntimesPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isStartingLlama, setIsStartingLlama] = useState(false);
   const [isStoppingLlama, setIsStoppingLlama] = useState(false);
+  const [isTestingOllama, setIsTestingOllama] = useState(false);
+
+  // Probe llama.cpp toggle and CORS help states
+  const [probeLlamaCpp, setProbeLlamaCpp] = useState(() => {
+    return typeof window !== 'undefined' && localStorage.getItem('probe_llama_cpp') === 'true';
+  });
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [showCorsHelp, setShowCorsHelp] = useState(false);
 
   // Modals
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
@@ -74,6 +87,53 @@ export function RuntimesPage() {
   const [llamaNgl, setLlamaNgl] = useState(config?.llama_cpp?.gpu_layers !== undefined ? config.llama_cpp.gpu_layers : 0);
   const [llamaCtx, setLlamaCtx] = useState(config?.llama_cpp?.context_size || 2048);
   const [llamaPort, setLlamaPort] = useState(config?.llama_cpp?.port || 8080);
+
+  const handleCopy = (key: string, text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 2000);
+    showSuccess('Copied command to clipboard');
+  };
+
+  const handleToggleLlamaProbe = async () => {
+    const next = !probeLlamaCpp;
+    setProbeLlamaCpp(next);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('probe_llama_cpp', next ? 'true' : 'false');
+    }
+    await refreshClientDetection();
+    showInfo(next ? 'Enabled llama.cpp localhost:8080 probe' : 'Disabled llama.cpp probe to prevent console error logs');
+  };
+
+  const handleTestOllamaConnection = async () => {
+    setIsTestingOllama(true);
+    showInfo('Testing connection to local Ollama daemon at 127.0.0.1:11434...');
+    try {
+      if (isHosted && !isExactLocalEngine) {
+        await refreshClientDetection();
+        const res = await detectLocalOllamaDirect();
+        if (res.status === 'online') {
+          showSuccess(`Ollama is online! Detected v${res.version || 'latest'} with ${res.models.length} local models.`);
+        } else if (res.status === 'cors_blocked') {
+          showError('Ollama is running but blocking this site. Run the CORS fix command below.');
+          setShowCorsHelp(true);
+        } else {
+          showError('Ollama daemon is not running at 127.0.0.1:11434. Start Ollama on your PC.');
+        }
+      } else {
+        await refreshRuntimes();
+        if (runtimes?.ollama?.detected) {
+          showSuccess(`Ollama daemon connected! Version ${runtimes.ollama.version || 'unknown'}`);
+        } else {
+          showError('Ollama service is unreachable. Ensure the Ollama daemon is running.');
+        }
+      }
+    } catch (err: any) {
+      showError(err.message || 'Connection test failed');
+    } finally {
+      setIsTestingOllama(false);
+    }
+  };
 
   // Filtered models
   const filteredModels = models.filter((m) => {
@@ -224,6 +284,11 @@ export function RuntimesPage() {
 
   const llama = runtimes?.llama_cpp;
   const ollama = runtimes?.ollama;
+
+  const isOllamaCorsBlocked = isHosted && !isExactLocalEngine && clientRuntimes?.ollama?.status === 'cors_blocked';
+  const isOllamaOnline = (isHosted && !isExactLocalEngine)
+    ? clientRuntimes?.ollama?.status === 'online'
+    : !!ollama?.detected;
 
   return (
     <div className="space-y-6">
@@ -410,9 +475,22 @@ export function RuntimesPage() {
                   llama.cpp server mode
                 </label>
               </div>
-              <Badge variant={llama?.status?.healthy ? 'success' : llama?.status?.running ? 'warning' : 'outline'} className="text-[10px] font-mono">
-                {llama?.status?.healthy ? 'RUNNING & READY' : llama?.status?.running ? 'STARTING' : 'STOPPED'}
-              </Badge>
+              {isHosted && !isExactLocalEngine ? (
+                <Badge
+                  variant={clientRuntimes?.llama_cpp?.running ? 'success' : 'outline'}
+                  className="text-[10px] font-mono"
+                >
+                  {clientRuntimes?.llama_cpp?.running
+                    ? 'RUNNING & READY'
+                    : probeLlamaCpp
+                    ? 'NO SERVER ON :8080'
+                    : 'PROBE DISABLED'}
+                </Badge>
+              ) : (
+                <Badge variant={llama?.status?.healthy ? 'success' : llama?.status?.running ? 'warning' : 'outline'} className="text-[10px] font-mono">
+                  {llama?.status?.healthy ? 'RUNNING & READY' : llama?.status?.running ? 'STARTING' : 'STOPPED'}
+                </Badge>
+              )}
             </div>
             <CardDescription>Standalone high-performance C++ LLM inference engine</CardDescription>
           </CardHeader>
@@ -421,82 +499,122 @@ export function RuntimesPage() {
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Binary Executable:</span>
                 <span className="font-mono text-foreground truncate max-w-[240px]" title={llama?.executable_path}>
-                  {llama?.executable_path || 'Not detected'}
+                  {llama?.executable_path || (isHosted ? 'Local host process' : 'Not detected')}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Process State:</span>
                 <span className="font-mono text-foreground">
-                  {llama?.status?.running ? `PID ${llama.status.pid} on port ${llama.status.port}` : 'Not running'}
+                  {isHosted && !isExactLocalEngine
+                    ? clientRuntimes?.llama_cpp?.running
+                      ? 'Detected on localhost:8080'
+                      : probeLlamaCpp
+                      ? 'No listener detected on 127.0.0.1:8080'
+                      : 'Probe disabled (prevent console logs)'
+                    : llama?.status?.running
+                    ? `PID ${llama.status.pid} on port ${llama.status.port}`
+                    : 'Not running'}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Resident Memory (RSS):</span>
-                <span className="font-mono text-foreground">{llama?.status?.memory_rss_formatted || '0 B'}</span>
+                <span className="font-mono text-foreground">
+                  {isHosted && !isExactLocalEngine
+                    ? (clientRuntimes?.llama_cpp?.running ? 'Active' : '0 B')
+                    : (llama?.status?.memory_rss_formatted || '0 B')}
+                </span>
               </div>
             </div>
 
-            {/* Launch parameters */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
-              <div>
-                <label className="text-[11px] text-muted-foreground block mb-1">Threads (-t)</label>
-                <input
-                  type="number"
-                  value={llamaThreads}
-                  onChange={(e) => setLlamaThreads(parseInt(e.target.value, 10) || 4)}
-                  className="w-full h-8 px-2 rounded border border-input bg-background font-mono text-xs"
-                />
+            {isHosted && !isExactLocalEngine ? (
+              <div className="space-y-3 pt-1">
+                <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-background/50">
+                  <div className="space-y-0.5">
+                    <div className="text-xs font-medium text-foreground">Local Port Probe (:8080)</div>
+                    <div className="text-[11px] text-muted-foreground">
+                      {probeLlamaCpp
+                        ? 'Probing localhost:8080 for running llama-server instances'
+                        : 'Disabled to prevent browser ERR_CONNECTION_REFUSED log spam'}
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant={probeLlamaCpp ? 'default' : 'outline'}
+                    onClick={handleToggleLlamaProbe}
+                    className="h-7 text-xs px-2.5"
+                  >
+                    {probeLlamaCpp ? 'Probing On' : 'Enable Probe'}
+                  </Button>
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Subprocess management is handled by your local engine daemon. When browsing the hosted dashboard, run <code className="font-mono text-foreground">llama-server --port 8080 -m &lt;model.gguf&gt;</code> on your machine and enable probing.
+                </p>
               </div>
-              <div>
-                <label className="text-[11px] text-muted-foreground block mb-1">GPU Layers (-ngl)</label>
-                <input
-                  type="number"
-                  value={llamaNgl}
-                  onChange={(e) => setLlamaNgl(parseInt(e.target.value, 10) || 0)}
-                  className="w-full h-8 px-2 rounded border border-input bg-background font-mono text-xs"
-                />
-              </div>
-              <div>
-                <label className="text-[11px] text-muted-foreground block mb-1">Context (-c)</label>
-                <input
-                  type="number"
-                  value={llamaCtx}
-                  onChange={(e) => setLlamaCtx(parseInt(e.target.value, 10) || 2048)}
-                  className="w-full h-8 px-2 rounded border border-input bg-background font-mono text-xs"
-                />
-              </div>
-              <div>
-                <label className="text-[11px] text-muted-foreground block mb-1">Port</label>
-                <input
-                  type="number"
-                  value={llamaPort}
-                  onChange={(e) => setLlamaPort(parseInt(e.target.value, 10) || 8080)}
-                  className="w-full h-8 px-2 rounded border border-input bg-background font-mono text-xs"
-                />
-              </div>
-            </div>
+            ) : (
+              <>
+                {/* Launch parameters */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                  <div>
+                    <label className="text-[11px] text-muted-foreground block mb-1">Threads (-t)</label>
+                    <input
+                      type="number"
+                      value={llamaThreads}
+                      onChange={(e) => setLlamaThreads(parseInt(e.target.value, 10) || 4)}
+                      className="w-full h-8 px-2 rounded border border-input bg-background font-mono text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-muted-foreground block mb-1">GPU Layers (-ngl)</label>
+                    <input
+                      type="number"
+                      value={llamaNgl}
+                      onChange={(e) => setLlamaNgl(parseInt(e.target.value, 10) || 0)}
+                      className="w-full h-8 px-2 rounded border border-input bg-background font-mono text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-muted-foreground block mb-1">Context (-c)</label>
+                    <input
+                      type="number"
+                      value={llamaCtx}
+                      onChange={(e) => setLlamaCtx(parseInt(e.target.value, 10) || 2048)}
+                      className="w-full h-8 px-2 rounded border border-input bg-background font-mono text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-muted-foreground block mb-1">Port</label>
+                    <input
+                      type="number"
+                      value={llamaPort}
+                      onChange={(e) => setLlamaPort(parseInt(e.target.value, 10) || 8080)}
+                      className="w-full h-8 px-2 rounded border border-input bg-background font-mono text-xs"
+                    />
+                  </div>
+                </div>
 
-            <div className="flex gap-2 pt-2">
-              <Button
-                size="sm"
-                onClick={handleStartLlama}
-                disabled={isStartingLlama || llama?.status?.healthy}
-                className="gap-1.5 text-xs flex-1"
-              >
-                <Play className="w-3.5 h-3.5 fill-current" />
-                Start Server Process
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={handleStopLlama}
-                disabled={isStoppingLlama || !llama?.status?.running}
-                className="gap-1.5 text-xs flex-1"
-              >
-                <Square className="w-3.5 h-3.5 fill-current" />
-                Stop Server
-              </Button>
-            </div>
+                <div className="flex gap-2 pt-2">
+                  <Button
+                    size="sm"
+                    onClick={handleStartLlama}
+                    disabled={isStartingLlama || llama?.status?.healthy}
+                    className="gap-1.5 text-xs flex-1"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    Start Server Process
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={handleStopLlama}
+                    disabled={isStoppingLlama || !llama?.status?.running}
+                    className="gap-1.5 text-xs flex-1"
+                  >
+                    <Square className="w-3.5 h-3.5 fill-current" />
+                    Stop Server
+                  </Button>
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -517,9 +635,19 @@ export function RuntimesPage() {
                   Ollama Service Integration
                 </label>
               </div>
-              <Badge variant={ollama?.detected ? 'success' : 'destructive'} className="text-[10px] font-mono">
-                {ollama?.detected ? `CONNECTED (v${ollama.version})` : 'SERVICE OFFLINE'}
-              </Badge>
+              {isOllamaOnline ? (
+                <Badge variant="success" className="text-[10px] font-mono">
+                  CONNECTED (v{isHosted && !isExactLocalEngine ? (clientRuntimes?.ollama?.version || '0.x') : (ollama?.version || '0.x')})
+                </Badge>
+              ) : isOllamaCorsBlocked ? (
+                <Badge className="text-[10px] font-mono bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                  CORS BLOCKED
+                </Badge>
+              ) : (
+                <Badge variant="destructive" className="text-[10px] font-mono">
+                  SERVICE OFFLINE
+                </Badge>
+              )}
             </div>
             <CardDescription>Managed local Ollama daemon integration</CardDescription>
           </CardHeader>
@@ -527,42 +655,135 @@ export function RuntimesPage() {
             <div className="space-y-2 p-3 rounded-lg border border-border bg-muted/20">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Service API Endpoint:</span>
-                <span className="font-mono text-foreground">{ollama?.base_url || 'http://127.0.0.1:11434'}</span>
+                <span className="font-mono text-foreground">
+                  {isHosted && !isExactLocalEngine
+                    ? (clientRuntimes?.ollama?.base_url || 'http://127.0.0.1:11434')
+                    : ((ollama as any)?.base_url || (ollama as any)?.url || 'http://127.0.0.1:11434')}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Daemon Version:</span>
-                <span className="font-mono text-foreground">{ollama?.version || 'Unavailable'}</span>
+                <span className="font-mono text-foreground">
+                  {isHosted && !isExactLocalEngine
+                    ? (clientRuntimes?.ollama?.version || (isOllamaCorsBlocked ? 'Detected (CORS blocked)' : 'Unavailable'))
+                    : (ollama?.version || 'Unavailable')}
+                </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Running Models in Memory:</span>
+                <span className="text-muted-foreground">Installed Models:</span>
+                <span className="font-mono text-foreground">
+                  {isHosted && !isExactLocalEngine
+                    ? `${clientRuntimes?.ollama?.models?.length || 0} models detected`
+                    : `${models.filter(m => m.runtime_compatibility.includes('ollama')).length} models`}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Running in Memory:</span>
                 <span className="font-mono text-primary truncate max-w-[240px]">
-                  {(ollama?.running_models || []).map((m) => m.name).join(', ') || 'None in memory'}
+                  {isHosted && !isExactLocalEngine
+                    ? (((clientRuntimes?.ollama?.running_models || []) as any[]).map((m: any) => typeof m === 'string' ? m : m?.name || m).join(', ') || 'None in memory')
+                    : (((ollama?.running_models || []) as any[]).map((m: any) => typeof m === 'string' ? m : m?.name || m).join(', ') || 'None in memory')}
                 </span>
               </div>
             </div>
 
-            <p className="text-[11px] text-muted-foreground leading-relaxed pt-1">
-              Ollama operates as a background system daemon with automatic GPU VRAM allocation. When an Ollama model is selected, the application routes inference directly through Ollama's local HTTP API without spawning separate subprocesses.
-            </p>
+            {/* CORS Blocked / Help Section */}
+            {(isOllamaCorsBlocked || showCorsHelp) && (
+              <div className="p-3.5 rounded-lg border border-amber-500/40 bg-amber-500/10 space-y-3">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <div className="text-xs font-semibold text-amber-300">
+                      Ollama is running but blocking this website
+                    </div>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      Browsers enforce Cross-Origin Resource Sharing (CORS) when a secure hosted site (<code className="text-foreground">{typeof window !== 'undefined' ? window.location.origin : 'https://lmlhe.onrender.com'}</code>) connects to your local <code className="text-foreground">127.0.0.1:11434</code>. Allow this origin in Ollama with one of the commands below:
+                    </p>
+                  </div>
+                </div>
 
-            <div className="pt-4">
+                <div className="space-y-2 pt-1">
+                  <div className="rounded-md border border-border bg-background/80 p-2.5 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-medium text-foreground">Windows PowerShell (Current Session)</span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 px-2 text-xs gap-1"
+                        onClick={() => handleCopy('ps', `$env:OLLAMA_ORIGINS="${typeof window !== 'undefined' ? window.location.origin : 'https://lmlhe.onrender.com'}"; ollama serve`)}
+                      >
+                        {copiedKey === 'ps' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                        <span>{copiedKey === 'ps' ? 'Copied' : 'Copy'}</span>
+                      </Button>
+                    </div>
+                    <pre className="p-1.5 rounded bg-muted/80 font-mono text-[11px] text-primary overflow-x-auto select-all">
+                      {`$env:OLLAMA_ORIGINS="${typeof window !== 'undefined' ? window.location.origin : 'https://lmlhe.onrender.com'}"; ollama serve`}
+                    </pre>
+                  </div>
+
+                  <div className="rounded-md border border-border bg-background/80 p-2.5 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-medium text-foreground">Windows Permanent (setx)</span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 px-2 text-xs gap-1"
+                        onClick={() => handleCopy('setx', `setx OLLAMA_ORIGINS "${typeof window !== 'undefined' ? window.location.origin : 'https://lmlhe.onrender.com'}"`)}
+                      >
+                        {copiedKey === 'setx' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                        <span>{copiedKey === 'setx' ? 'Copied' : 'Copy'}</span>
+                      </Button>
+                    </div>
+                    <pre className="p-1.5 rounded bg-muted/80 font-mono text-[11px] text-primary overflow-x-auto select-all">
+                      {`setx OLLAMA_ORIGINS "${typeof window !== 'undefined' ? window.location.origin : 'https://lmlhe.onrender.com'}"`}
+                    </pre>
+                    <p className="text-[10px] text-muted-foreground">
+                      Note: After running setx, right-click Ollama in the Windows taskbar tray &rarr; <strong>Quit Ollama</strong>, then relaunch Ollama.
+                    </p>
+                  </div>
+
+                  <div className="rounded-md border border-border bg-background/80 p-2.5 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-medium text-foreground">macOS / Linux</span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 px-2 text-xs gap-1"
+                        onClick={() => handleCopy('mac', `OLLAMA_ORIGINS="${typeof window !== 'undefined' ? window.location.origin : 'https://lmlhe.onrender.com'}" ollama serve`)}
+                      >
+                        {copiedKey === 'mac' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                        <span>{copiedKey === 'mac' ? 'Copied' : 'Copy'}</span>
+                      </Button>
+                    </div>
+                    <pre className="p-1.5 rounded bg-muted/80 font-mono text-[11px] text-primary overflow-x-auto select-all">
+                      {`OLLAMA_ORIGINS="${typeof window !== 'undefined' ? window.location.origin : 'https://lmlhe.onrender.com'}" ollama serve`}
+                    </pre>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between gap-2 pt-2">
               <Button
                 size="sm"
                 variant="outline"
-                onClick={async () => {
-                  showInfo('Checking Ollama daemon responsiveness...');
-                  await refreshRuntimes();
-                  if (runtimes?.ollama?.detected) {
-                    showSuccess('Ollama daemon is connected and healthy!');
-                  } else {
-                    showError('Ollama service is unreachable. Ensure the Ollama daemon is running.');
-                  }
-                }}
+                onClick={handleTestOllamaConnection}
+                disabled={isTestingOllama}
                 className="w-full text-xs gap-1.5"
               >
-                <RefreshCw className="w-3.5 h-3.5" />
+                <RefreshCw className={cn('w-3.5 h-3.5', isTestingOllama && 'animate-spin')} />
                 Test Ollama Connection
               </Button>
+              {isHosted && !isExactLocalEngine && !isOllamaCorsBlocked && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setShowCorsHelp((prev) => !prev)}
+                  className="text-xs text-muted-foreground shrink-0"
+                >
+                  {showCorsHelp ? 'Hide CORS Guide' : 'CORS Guide'}
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>

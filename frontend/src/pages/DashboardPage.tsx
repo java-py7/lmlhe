@@ -27,6 +27,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { cn } from '@/lib/utils';
 
 export function DashboardPage() {
   const navigate = useNavigate();
@@ -41,6 +42,11 @@ export function DashboardPage() {
     metrics,
     refreshRuntimes,
     refreshModels,
+    isHosted,
+    isExactLocalEngine,
+    cpuScore,
+    isBenchmarking,
+    runSpeedTest,
   } = useEngine();
 
   const [isStarting, setIsStarting] = useState(false);
@@ -129,34 +135,69 @@ export function DashboardPage() {
     <div className="space-y-6">
       {/* 4 Top Telemetry KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* CPU Utilization */}
+        {/* CPU Utilization / Speed Score */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-medium text-muted-foreground">CPU Utilization</CardTitle>
+            <CardTitle className="text-xs font-medium text-muted-foreground">
+              {isHosted && !isExactLocalEngine ? 'CPU Architecture & Speed' : 'CPU Utilization'}
+            </CardTitle>
             <Badge variant="outline" className="font-mono text-[10px]">
-              {hasHardware && hardware?.cpu?.physical_cores
-                ? `${hardware.cpu.physical_cores}C / ${hardware.cpu.logical_threads}T`
-                : 'OFFLINE'}
+              {hasHardware
+                ? isHosted && !isExactLocalEngine
+                  ? `~${hardware?.cpu?.physical_cores || 4}C / ${hardware?.cpu?.logical_threads || 8}T`
+                  : `${hardware?.cpu?.physical_cores || 4}C / ${hardware?.cpu?.logical_threads || 8}T`
+                : 'ESTIMATE (~)'}
             </Badge>
           </CardHeader>
           <CardContent className="space-y-2">
-            <div className="flex items-baseline justify-between">
-              <span className="text-2xl font-bold tracking-tight">
-                {hasHardware ? `${cpuPercent}%` : '—'}
-              </span>
-              <span className="text-xs text-muted-foreground truncate max-w-[120px]" title={hardware?.cpu?.name}>
-                {hasHardware ? hardware?.cpu?.name?.split(' ')[0] || 'Processor' : 'Hardware Unavailable'}
-              </span>
-            </div>
-            <Progress value={cpuPercent} indicatorColor={cpuPercent > 85 ? 'bg-rose-500' : 'bg-primary'} />
-            {/* Sparkline */}
-            <div className="h-9 w-full pt-1">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={cpuHistory}>
-                  <Area type="monotone" dataKey="v" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.15} strokeWidth={1.5} isAnimationActive={false} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
+            {isHosted && !isExactLocalEngine ? (
+              <>
+                <div className="flex items-baseline justify-between">
+                  <span className="text-2xl font-bold tracking-tight">
+                    {cpuScore !== null ? `${cpuScore} Mops/s` : isBenchmarking ? 'Testing...' : 'Ready'}
+                  </span>
+                  <span className="text-xs text-muted-foreground truncate max-w-[120px]" title={hardware?.cpu?.name}>
+                    {hardware?.cpu?.name?.split(' ')[0] || 'Processor'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between pt-1">
+                  <span className="text-[11px] text-muted-foreground font-mono">Relative Speed Score</span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => runSpeedTest()}
+                    disabled={isBenchmarking}
+                    className="h-6 px-2 text-[10px] gap-1 shrink-0"
+                  >
+                    <Zap className={cn('w-3 h-3 text-amber-500', isBenchmarking && 'animate-spin')} />
+                    {isBenchmarking ? 'Testing...' : 'Test Speed'}
+                  </Button>
+                </div>
+                <div className="text-[10px] text-muted-foreground/80 pt-1.5 border-t border-border/50">
+                  Live CPU % requires local engine (localhost:8000)
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-baseline justify-between">
+                  <span className="text-2xl font-bold tracking-tight">
+                    {hasHardware ? `${cpuPercent}%` : '—'}
+                  </span>
+                  <span className="text-xs text-muted-foreground truncate max-w-[120px]" title={hardware?.cpu?.name}>
+                    {hasHardware ? hardware?.cpu?.name?.split(' ')[0] || 'Processor' : 'Hardware Unavailable'}
+                  </span>
+                </div>
+                <Progress value={cpuPercent} indicatorColor={cpuPercent > 85 ? 'bg-rose-500' : 'bg-primary'} />
+                {/* Sparkline */}
+                <div className="h-9 w-full pt-1">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={cpuHistory}>
+                      <Area type="monotone" dataKey="v" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.15} strokeWidth={1.5} isAnimationActive={false} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -165,29 +206,47 @@ export function DashboardPage() {
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-xs font-medium text-muted-foreground">Memory Allocation</CardTitle>
             <Badge variant="outline" className="font-mono text-[10px]">
-              {hasHardware ? `${ramPercent}%` : 'OFFLINE'}
+              {isHosted && !isExactLocalEngine
+                ? 'ESTIMATE (~)'
+                : hasHardware
+                ? `${ramPercent}%`
+                : 'ESTIMATE (~)'}
             </Badge>
           </CardHeader>
           <CardContent className="space-y-2">
             <div className="flex items-baseline justify-between">
               <span className="text-2xl font-bold tracking-tight">
-                {hasHardware ? `${ramUsedGb.toFixed(1)} GB` : '—'}
+                {isHosted && !isExactLocalEngine
+                  ? `~${ramUsedGb.toFixed(1)} GB (est.)`
+                  : hasHardware
+                  ? `${ramUsedGb.toFixed(1)} GB`
+                  : '~3.2 GB (est.)'}
               </span>
               <span className="text-xs text-muted-foreground">
-                {hasHardware
+                {isHosted && !isExactLocalEngine
+                  ? `~${ramFreeGb.toFixed(1)} GB free (estimate)`
+                  : hasHardware
                   ? `${ramFreeGb.toFixed(1)} GB free of ${ramTotalGb.toFixed(0)} GB`
-                  : 'Local RAM not connected'}
+                  : '~4.8 GB free (estimate)'}
               </span>
             </div>
-            <Progress value={ramPercent} indicatorColor={ramPercent > 85 ? 'bg-rose-500' : 'bg-indigo-500'} />
-            {/* Sparkline */}
-            <div className="h-9 w-full pt-1">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={ramHistory}>
-                  <Area type="monotone" dataKey="v" stroke="#6366f1" fill="#6366f1" fillOpacity={0.15} strokeWidth={1.5} isAnimationActive={false} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
+            <Progress
+              value={isHosted && !isExactLocalEngine ? 40 : ramPercent}
+              indicatorColor={ramPercent > 85 ? 'bg-rose-500' : 'bg-indigo-500'}
+            />
+            {isHosted && !isExactLocalEngine ? (
+              <div className="text-[10px] text-muted-foreground/80 pt-1">
+                Estimated from {ramTotalGb.toFixed(0)} GB device memory (assuming ~60% free)
+              </div>
+            ) : (
+              <div className="h-9 w-full pt-1">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={ramHistory}>
+                    <Area type="monotone" dataKey="v" stroke="#6366f1" fill="#6366f1" fillOpacity={0.15} strokeWidth={1.5} isAnimationActive={false} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -196,23 +255,31 @@ export function DashboardPage() {
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-xs font-medium text-muted-foreground">GPU & VRAM</CardTitle>
             <Badge variant={gpu?.detected ? 'success' : 'outline'} className="text-[10px]">
-              {hasHardware ? (gpu?.detected ? gpu.vendor || 'DETECTED' : 'CPU-ONLY') : 'OFFLINE'}
+              {hasHardware
+                ? gpu?.detected
+                  ? gpu.vendor || 'DETECTED'
+                  : 'CPU-ONLY'
+                : 'ESTIMATE (~)'}
             </Badge>
           </CardHeader>
           <CardContent className="space-y-2">
             <div className="flex items-baseline justify-between">
               <span className="text-2xl font-bold tracking-tight">
-                {hasHardware ? (gpu?.detected ? gpu.dedicated_vram_formatted || 'Detected' : 'CPU GEMM') : '—'}
+                {hasHardware
+                  ? gpu?.detected
+                    ? gpu.dedicated_vram_formatted || 'Detected'
+                    : 'CPU GEMM'
+                  : '—'}
               </span>
               <span className="text-xs text-muted-foreground truncate max-w-[120px]" title={gpu?.name || 'CPU GEMM'}>
-                {hasHardware ? (gpu?.detected ? gpu.name : 'Integrated / None') : 'Local GPU Offline'}
+                {hasHardware ? (gpu?.detected ? gpu.name : 'Integrated / None') : 'Generic GPU'}
               </span>
             </div>
             <div className="text-[11px] text-muted-foreground pt-1 truncate">
               Shared pool: {hasHardware ? gpu?.shared_vram_formatted || 'Standard RAM pool' : '—'}
             </div>
             <div className="text-[11px] text-muted-foreground">
-              Offload Mode: <span className="font-medium text-foreground">{hasHardware ? (gpu?.detected ? 'GPU Acceleration' : 'CPU Thread Pooling') : 'Pending Connection'}</span>
+              Offload Mode: <span className="font-medium text-foreground">{hasHardware ? (gpu?.detected ? 'GPU Acceleration' : 'CPU Thread Pooling') : 'Auto Balancing'}</span>
             </div>
           </CardContent>
         </Card>

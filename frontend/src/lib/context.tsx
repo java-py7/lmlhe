@@ -16,6 +16,8 @@ import {
   detectBrowserStorageAsync,
   detectLocalOllamaDirect,
   detectLocalLlamaCppDirect,
+  probeLocalBackendAsync,
+  runCpuBenchmark,
   buildClientHardwareProfile,
   buildClientRuntimeStatus,
 } from './browserDetection';
@@ -36,8 +38,14 @@ interface EngineContextType {
   // Direct Environment & Browser Detection
   isOriginLocal: boolean;
   isHosted: boolean;
+  isExactLocalEngine: boolean;
   clientHardware: ClientDetectedHardware | null;
   clientRuntimes: ClientDetectedRuntimes | null;
+
+  // CPU Benchmark & Speed Test
+  cpuScore: number | null;
+  isBenchmarking: boolean;
+  runSpeedTest: () => Promise<number>;
 
   // Actions
   refreshHardware: () => Promise<void>;
@@ -53,7 +61,7 @@ interface EngineContextType {
 const EngineContext = createContext<EngineContextType | undefined>(undefined);
 
 export function EngineProvider({ children }: { children: React.ReactNode }) {
-  const { showSuccess, showError, showInfo } = useToast();
+  const { showSuccess, showError } = useToast();
 
   const isOriginLocal =
     typeof window !== 'undefined' &&
@@ -73,6 +81,11 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
   const [clientHardware, setClientHardware] = useState<ClientDetectedHardware | null>(null);
   const [clientRuntimes, setClientRuntimes] = useState<ClientDetectedRuntimes | null>(null);
   const [isDetecting, setIsDetecting] = useState<boolean>(false);
+  const [isExactLocalEngine, setIsExactLocalEngine] = useState<boolean>(false);
+
+  // CPU Speed benchmark state
+  const [cpuScore, setCpuScore] = useState<number | null>(null);
+  const [isBenchmarking, setIsBenchmarking] = useState<boolean>(false);
 
   // Effective active data state presented to UI
   const [activeModelId, setActiveModelId] = useState<string>('');
@@ -81,6 +94,22 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
 
   const isOriginLocalRef = useRef(isOriginLocal);
   isOriginLocalRef.current = isOriginLocal;
+
+  /**
+   * Run client CPU speed test loop
+   */
+  const runSpeedTest = useCallback(async (): Promise<number> => {
+    setIsBenchmarking(true);
+    // Yield to let UI show spinner
+    await new Promise((r) => setTimeout(r, 20));
+    try {
+      const score = runCpuBenchmark(350);
+      setCpuScore(score);
+      return score;
+    } finally {
+      setIsBenchmarking(false);
+    }
+  }, []);
 
   /**
    * Direct Browser & Local PC Detection
@@ -93,7 +122,23 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
       // 1. Synchronous browser hardware specs
       const initialHw = detectBrowserHardware();
 
-      // 2. Async WebGPU, Storage, and Local AI runtimes in parallel
+      // 2. Check if local engine backend is running on localhost:8000
+      let exactBackendHw: HardwareProfile | null = null;
+      if (!isOriginLocalRef.current) {
+        try {
+          exactBackendHw = await probeLocalBackendAsync();
+          if (exactBackendHw) {
+            setServerHardware(exactBackendHw);
+            setIsExactLocalEngine(true);
+          } else {
+            setIsExactLocalEngine(false);
+          }
+        } catch {
+          setIsExactLocalEngine(false);
+        }
+      }
+
+      // 3. Async WebGPU, Storage, and Local AI runtimes in parallel
       const [webGpuRes, storageRes, ollamaRes, llamaRes] = await Promise.allSettled([
         detectWebGPUAsync(),
         detectBrowserStorageAsync(),
@@ -130,6 +175,8 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
             ? ollamaRes.value
             : {
                 detected: false,
+                status: 'offline',
+                cors_blocked: false,
                 url: 'http://127.0.0.1:11434',
                 models: [],
                 running_models: [],
@@ -141,7 +188,8 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
             : {
                 detected: false,
                 url: 'http://127.0.0.1:8080',
-                message: 'llama.cpp server not detected',
+                message: 'llama.cpp probe disabled',
+                disabled: true,
               },
         webgpu: {
           supported: webGpuRes.status === 'fulfilled' ? webGpuRes.value.supported : false,
@@ -205,7 +253,6 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
         console.warn('Local hardware fetch note:', err.message);
       }
     }
-    // Also re-run browser detection
     await runDirectDetection();
   }, [runDirectDetection]);
 
@@ -221,7 +268,6 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
         console.warn('Models fetch note:', err.message);
       }
     }
-    // Also re-check local Ollama models directly
     try {
       const ollamaData = await detectLocalOllamaDirect();
       setClientRuntimes((prev) => {
@@ -240,10 +286,9 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
         console.warn('Runtimes fetch note:', err.message);
       }
     }
-    // Also re-probe local Ollama and llama.cpp directly
     const [ollamaRes, llamaRes] = await Promise.allSettled([
       detectLocalOllamaDirect(),
-      detectLocalLlamaCppDirect(),
+      detectLocalLlamaCppDirect(true),
     ]);
     setClientRuntimes((prev) => {
       if (!prev) return null;
@@ -273,16 +318,18 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
   const isHosted = !isOriginLocal;
 
   // Effective Active Hardware:
-  // When hosted, NEVER show Render / cloud server specs! Always present detected client hardware.
-  // When local origin, present the physical server hardware.
+  // When hosted, NEVER show Render / cloud server specs!
+  // If local engine responded on localhost:8000, present exact local engine values.
+  // Otherwise, present browser-estimated client hardware (~).
   const effectiveHardware: HardwareProfile | null = isOriginLocal
     ? serverHardware || (clientHardware ? buildClientHardwareProfile(clientHardware) : null)
+    : isExactLocalEngine && serverHardware
+    ? serverHardware
     : clientHardware
     ? buildClientHardwareProfile(clientHardware)
     : null;
 
   // Effective Active Models:
-  // Combine server models with directly discovered local Ollama models (deduplicated)
   const directOllamaModels = clientRuntimes?.ollama?.models || [];
   const effectiveModels: ModelEntry[] = isOriginLocal
     ? (() => {
@@ -308,8 +355,6 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
   const activeModel = effectiveModels.find((m) => m.id === activeModelId);
 
   // Robust runtime resolution:
-  // If active model is an Ollama model, active runtime MUST be 'ollama'
-  // If active model is GGUF, active runtime is 'llama.cpp server'
   const activeRuntime =
     activeModel &&
     (activeModel.format === 'Ollama' ||
@@ -339,7 +384,6 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
         showSuccess(`Selected model: ${res.model?.name || modelId} (${res.active_runtime})`);
         await Promise.allSettled([refreshModels(), refreshRuntimes()]);
       } else {
-        // Direct client selection
         setActiveModelId(modelId);
         const resolvedRuntime = isTargetOllama ? 'ollama' : 'llama.cpp server';
         setPreferredRuntime(resolvedRuntime);
@@ -369,13 +413,16 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
 
   // Initial load - runs only once on mount
   useEffect(() => {
-    refreshAll();
+    refreshAll().then(() => {
+      // Run CPU speed benchmark once automatically after detection
+      runSpeedTest();
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Live telemetry polling for local server
   useEffect(() => {
-    if (!isOriginLocal) return;
+    if (!isOriginLocal && !isExactLocalEngine) return;
 
     let mounted = true;
     const poll = async () => {
@@ -395,7 +442,7 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
       mounted = false;
       clearInterval(interval);
     };
-  }, [isOriginLocal]);
+  }, [isOriginLocal, isExactLocalEngine]);
 
   return (
     <EngineContext.Provider
@@ -413,8 +460,13 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
 
         isOriginLocal,
         isHosted,
+        isExactLocalEngine,
         clientHardware,
         clientRuntimes,
+
+        cpuScore,
+        isBenchmarking,
+        runSpeedTest,
 
         refreshHardware,
         refreshModels,

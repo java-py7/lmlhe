@@ -176,7 +176,7 @@ function mapAdvisorRecommendation(raw: any): AdvisorRecommendationItem {
 export function AdvisorPage() {
   const navigate = useNavigate();
   const { showSuccess, showError, showInfo } = useToast();
-  const { refreshModels, hardware, clientHardware, isOriginLocal } = useEngine();
+  const { refreshModels, hardware, clientHardware, isOriginLocal, isHosted, isExactLocalEngine } = useEngine();
 
   // Filters & Parameters
   const [workload, setWorkload] = useState('general');
@@ -429,7 +429,7 @@ export function AdvisorPage() {
                   <span className="text-muted-foreground">Available System RAM</span>
                   <span className="font-semibold text-foreground">
                     {hardware?.ram?.available_gb !== undefined && hardware?.ram?.available_gb > 0
-                      ? `${hardware.ram.available_gb.toFixed(1)} GB free`
+                      ? `~${hardware.ram.available_gb.toFixed(1)} GB free ${isHosted && !isExactLocalEngine ? '(est.)' : ''}`
                       : clientHardware?.ram?.total_formatted || hwSummary?.ram?.total_formatted || '—'}
                   </span>
                 </div>
@@ -437,7 +437,7 @@ export function AdvisorPage() {
                   <span className="text-muted-foreground">Compute Topologies</span>
                   <span className="font-semibold text-foreground">
                     {hardware?.cpu?.physical_cores
-                      ? `${hardware.cpu.physical_cores}C / ${hardware.cpu.logical_threads}T`
+                      ? `${hardware.cpu.physical_cores}C / ${hardware.cpu.logical_threads}T ${isHosted && !isExactLocalEngine ? '(est.)' : ''}`
                       : hwSummary?.cpu?.physical_cores
                       ? `${hwSummary.cpu.physical_cores} Cores`
                       : '—'}
@@ -447,9 +447,9 @@ export function AdvisorPage() {
                   <span className="text-muted-foreground">GPU Acceleration</span>
                   <span className="font-semibold text-foreground">
                     {hardware?.gpu?.detected
-                      ? hardware.gpu.dedicated_vram_formatted || hardware.gpu.name || 'Detected'
+                      ? `${hardware.gpu.name} (${hardware.gpu.dedicated_vram_formatted || 'Shared'})`
                       : hwSummary?.gpu?.detected
-                      ? hwSummary.gpu.dedicated_vram_formatted || hwSummary.gpu.name
+                      ? `${hwSummary.gpu.name} (${hwSummary.gpu.dedicated_vram_formatted || 'Shared'})`
                       : 'CPU-Only (Thread Pooling)'}
                   </span>
                 </div>
