@@ -1,5 +1,65 @@
 [
   {
+    "id": "eval_069d460f",
+    "timestamp": "2026-11-20 18:29:20",
+    "model": "llama3.2:1b",
+    "model_id": "llama3.2:1b",
+    "runtime": "ollama",
+    "tasks": [
+      {
+        "task_id": "instruction_following",
+        "task_name": "Instruction Following & Output Constraints",
+        "prompt": "List exactly 3 advantages of quantized models over full-precision models. Number each item 1 to 3 with no introductory or concluding text.",
+        "response": "1. Reduced computational complexity\n2. Improved accuracy in high-dimensional spaces\n3. Enhanced interpretability through quantization",
+        "score": 10.0,
+        "max_score": 10.0,
+        "rationale": "Exactly 3 numbered items provided as instructed.",
+        "duration_ms": 6668.9
+      }
+    ],
+    "composite_score": 10.0,
+    "max_score": 10.0,
+    "human_rating": 9.0,
+    "human_feedback": "Test human validation review",
+    "hardware": {
+      "cpu": "Intel64 Family 6 Model 60 Stepping 3, GenuineIntel",
+      "ram_total_gb": 15.96,
+      "gpu": "N/A",
+      "os": "Windows 10"
+    },
+    "human_evaluator": "AutomatedTest"
+  },
+  {
+    "id": "eval_bc4b2cbd",
+    "timestamp": "2026-11-20 18:20:28",
+    "model": "llama3.2:1b",
+    "model_id": "llama3.2:1b",
+    "runtime": "ollama",
+    "tasks": [
+      {
+        "task_id": "instruction_following",
+        "task_name": "Instruction Following & Output Constraints",
+        "prompt": "List exactly 3 advantages of quantized models over full-precision models. Number each item 1 to 3 with no introductory or concluding text.",
+        "response": "1. Reduced computational complexity\n2. Improved accuracy in high-dimensional spaces\n3. Enhanced interpretability through quantization",
+        "score": 10.0,
+        "max_score": 10.0,
+        "rationale": "Exactly 3 numbered items provided as instructed.",
+        "duration_ms": 7775.7
+      }
+    ],
+    "composite_score": 10.0,
+    "max_score": 10.0,
+    "human_rating": 9.0,
+    "human_feedback": "Test human validation review",
+    "hardware": {
+      "cpu": "Intel64 Family 6 Model 60 Stepping 3, GenuineIntel",
+      "ram_total_gb": 15.96,
+      "gpu": "N/A",
+      "os": "Windows 10"
+    },
+    "human_evaluator": "AutomatedTest"
+  },
+  {
     "id": "eval_0dde0386",
     "timestamp": "2026-11-20 17:26:29",
     "model": "llama3.2:1b",

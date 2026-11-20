@@ -27,6 +27,16 @@ export interface CPUInfo {
   per_core_percent?: number[];
   temperature_celsius?: number;
   temperature_supported?: boolean;
+  instruction_sets?: {
+    avx?: boolean;
+    avx2?: boolean;
+    avx512?: boolean;
+    neon?: boolean;
+    sse4_2?: boolean;
+    detected_list?: string[];
+    status?: string;
+  };
+  instruction_sets_formatted?: string;
 }
 
 export interface RAMInfo {
@@ -150,23 +160,28 @@ export interface EngineConfig {
   deployment?: DeploymentInfo;
 }
 
+export interface RuntimeEntry {
+  runtime_id: string;
+  display_name: string;
+  available: boolean;
+  installed?: boolean;
+  running?: boolean;
+  executable_path?: string;
+  version?: string;
+  detection_method?: string;
+  supported_formats: string[];
+  message: string;
+  connected?: boolean;
+  capabilities?: Record<string, any>;
+  config_options?: Record<string, any>;
+  metrics?: Record<string, any>;
+}
+
 export interface RuntimeStatusResponse {
   active_runtime: string;
   supported_runtimes: string[];
-  all_runtimes: Array<{
-    runtime_id: string;
-    display_name: string;
-    available: boolean;
-    supported_formats: string[];
-    message: string;
-  }>;
-  adapters: Record<string, {
-    runtime_id: string;
-    display_name: string;
-    available: boolean;
-    supported_formats: string[];
-    message: string;
-  }>;
+  all_runtimes: RuntimeEntry[];
+  adapters: Record<string, RuntimeEntry>;
   llama_cpp: {
     detected: boolean;
     executable_path: string;

@@ -44,6 +44,7 @@ export function DashboardPage() {
     refreshModels,
     isHosted,
     isExactLocalEngine,
+    clientRuntimes,
     cpuScore,
     isBenchmarking,
     runSpeedTest,
@@ -79,8 +80,13 @@ export function DashboardPage() {
   const isLlamaRunning = Boolean(runtimes?.llama_cpp?.status?.running);
   const isLlamaHealthy = Boolean(runtimes?.llama_cpp?.status?.healthy);
   const isOllamaOnline = Boolean(runtimes?.ollama?.detected);
+  const activeRuntimeObj = runtimes?.adapters?.[activeRuntime] || runtimes?.all_runtimes?.find((r: any) => r.runtime_id === activeRuntime);
 
-  const isServerReady = isOllama ? isOllamaOnline : isLlamaHealthy;
+  const isServerReady = isOllama
+    ? (isHosted && !isExactLocalEngine ? Boolean(clientRuntimes?.ollama?.detected) : isOllamaOnline)
+    : activeRuntime === 'llama.cpp server'
+    ? (isHosted && !isExactLocalEngine ? Boolean(clientRuntimes?.llama_cpp?.running) : isLlamaHealthy)
+    : Boolean(activeRuntimeObj?.available || activeRuntimeObj?.installed);
 
   const handleStartRuntime = async () => {
     setIsStarting(true);
@@ -89,7 +95,7 @@ export function DashboardPage() {
         showInfo('Verifying Ollama service connection...');
         await api.startRuntime();
         showSuccess('Ollama service connected and responsive!');
-      } else {
+      } else if (activeRuntime === 'llama.cpp server') {
         showInfo('Starting llama.cpp server subprocess...');
         const cfgLlama = config?.llama_cpp;
         await api.startLlamaServer({
@@ -99,6 +105,14 @@ export function DashboardPage() {
           port: cfgLlama?.port || 8080,
         });
         showSuccess('llama-server successfully started!');
+      } else {
+        showInfo(`Verifying ${activeRuntimeObj?.display_name || activeRuntime}...`);
+        await refreshRuntimes();
+        if (activeRuntimeObj?.available || activeRuntimeObj?.installed) {
+          showSuccess(`${activeRuntimeObj?.display_name || activeRuntime} is verified and ready!`);
+        } else {
+          showInfo(`${activeRuntimeObj?.display_name || activeRuntime}: ${activeRuntimeObj?.message || 'Check installation instructions in Runtimes tab.'}`);
+        }
       }
       await refreshRuntimes();
     } catch (err: any) {
@@ -114,9 +128,12 @@ export function DashboardPage() {
       if (isOllama) {
         await api.stopRuntime();
         showInfo('Ollama inference session halted');
-      } else {
+      } else if (activeRuntime === 'llama.cpp server') {
         await api.stopLlamaServer();
         showInfo('llama-server stopped');
+      } else {
+        await api.stopRuntime();
+        showInfo(`${activeRuntimeObj?.display_name || activeRuntime} halted`);
       }
       await refreshRuntimes();
     } catch (err: any) {
@@ -414,7 +431,7 @@ export function DashboardPage() {
               className="gap-1.5"
             >
               <Play className="w-3.5 h-3.5 fill-current" />
-              {isOllama ? 'Check Ollama Connection' : 'Start llama.cpp Server'}
+              {isOllama ? 'Check Ollama Connection' : activeRuntime === 'llama.cpp server' ? 'Start llama.cpp Server' : `Verify ${activeRuntimeObj?.display_name || activeRuntime}`}
             </Button>
             <Button
               size="sm"
@@ -424,7 +441,7 @@ export function DashboardPage() {
               className="gap-1.5"
             >
               <Square className="w-3.5 h-3.5 fill-current" />
-              {isOllama ? 'Halt Ollama Inference' : 'Stop Server'}
+              {isOllama ? 'Halt Ollama Inference' : activeRuntime === 'llama.cpp server' ? 'Stop Server' : 'Stop Runtime'}
             </Button>
             <Button
               size="sm"

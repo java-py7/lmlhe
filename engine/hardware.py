@@ -1,11 +1,13 @@
 import json
 import logging
+import os
 import platform
 import shutil
 import subprocess
 import threading
 import time
 from collections import deque
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import psutil
@@ -135,6 +137,69 @@ class HardwareDetector:
         except Exception:
             pass
 
+        # Instruction sets detection
+        instruction_sets = {
+            "avx": False,
+            "avx2": False,
+            "avx512": False,
+            "neon": False,
+            "sse4_2": False,
+            "fma": False,
+            "arm_v8": False,
+            "detected_list": [],
+            "status": "Verified",
+        }
+
+        if sys_name == "Windows":
+            try:
+                import ctypes
+                k32 = ctypes.windll.kernel32
+                if hasattr(k32, "IsProcessorFeaturePresent"):
+                    instruction_sets["avx"] = bool(k32.IsProcessorFeaturePresent(22))
+                    instruction_sets["avx2"] = bool(k32.IsProcessorFeaturePresent(40))
+                    instruction_sets["avx512"] = bool(k32.IsProcessorFeaturePresent(49))
+                    instruction_sets["arm_v8"] = bool(k32.IsProcessorFeaturePresent(29))
+                    instruction_sets["sse4_2"] = bool(k32.IsProcessorFeaturePresent(38))
+            except Exception as e:
+                logger.debug(f"Windows CPU feature detect note: {e}")
+
+        elif sys_name == "Linux":
+            try:
+                with open("/proc/cpuinfo", "r") as f:
+                    content = f.read().lower()
+                    instruction_sets["avx"] = " avx " in content
+                    instruction_sets["avx2"] = " avx2 " in content
+                    instruction_sets["avx512"] = " avx512" in content
+                    instruction_sets["neon"] = " neon " in content or " asimd " in content
+                    instruction_sets["sse4_2"] = " sse4_2 " in content
+                    instruction_sets["fma"] = " fma " in content
+            except Exception as e:
+                logger.debug(f"Linux CPU feature detect note: {e}")
+
+        elif sys_name == "Darwin":
+            try:
+                if platform.machine() == "arm64":
+                    instruction_sets["neon"] = True
+                    instruction_sets["arm_v8"] = True
+                else:
+                    out = subprocess.check_output(
+                        ["sysctl", "-n", "machdep.cpu.features", "machdep.cpu.leaf7_features"], text=True
+                    ).lower()
+                    instruction_sets["avx"] = "avx1.0" in out or "avx" in out
+                    instruction_sets["avx2"] = "avx2" in out
+                    instruction_sets["avx512"] = "avx512" in out
+                    instruction_sets["sse4_2"] = "sse4.2" in out or "sse4_2" in out
+            except Exception as e:
+                logger.debug(f"Darwin CPU feature detect note: {e}")
+
+        detected_list = []
+        for name in ["avx512", "avx2", "avx", "neon", "arm_v8", "sse4_2", "fma"]:
+            if instruction_sets.get(name):
+                detected_list.append(name.upper().replace("_", "."))
+        instruction_sets["detected_list"] = detected_list
+        info["instruction_sets"] = instruction_sets
+        info["instruction_sets_formatted"] = ", ".join(detected_list) if detected_list else "Standard x86/ARM"
+
         return info
 
     @staticmethod
@@ -157,32 +222,66 @@ class HardwareDetector:
             "type": "CPU / Integrated",
         }
 
-        if shutil.which("nvidia-smi"):
+        # Check for nvidia-smi in PATH or standard install paths
+        nvsmi_candidates = [
+            shutil.which("nvidia-smi"),
+            str(Path(os.environ.get("ProgramFiles", "C:/Program Files")) / "NVIDIA Corporation" / "NVSMI" / "nvidia-smi.exe"),
+            str(Path(os.environ.get("SystemDrive", "C:")) / "Windows" / "System32" / "nvidia-smi.exe"),
+            "/usr/bin/nvidia-smi",
+            "/usr/local/cuda/bin/nvidia-smi",
+        ]
+        nvsmi_exe = None
+        for cand in nvsmi_candidates:
+            if cand and Path(cand).is_file():
+                nvsmi_exe = cand
+                break
+
+        if nvsmi_exe:
             try:
                 out = subprocess.check_output(
                     [
-                        "nvidia-smi",
+                        nvsmi_exe,
                         "--query-gpu=name,memory.total,memory.used,driver_version,temperature.gpu,utilization.gpu",
                         "--format=csv,noheader,nounits",
                     ],
                     text=True,
-                    timeout=2,
+                    timeout=3,
                 ).strip()
                 if out:
                     parts = [p.strip() for p in out.split(",")]
                     gpu["detected"] = True
                     gpu["vendor"] = "NVIDIA"
                     gpu["name"] = parts[0]
-                    total_mb = float(parts[1])
-                    gpu["dedicated_vram_bytes"] = int(total_mb * 1024 * 1024)
-                    gpu["dedicated_vram_formatted"] = f"{total_mb/1024:.2f} GB"
-                    gpu["driver_version"] = parts[3]
-                    gpu["temperature_celsius"] = float(parts[4])
-                    gpu["utilization_percent"] = float(parts[5])
+                    
+                    try:
+                        total_mb = float(parts[1])
+                        gpu["dedicated_vram_bytes"] = int(total_mb * 1024 * 1024)
+                        gpu["dedicated_vram_formatted"] = f"{total_mb/1024:.2f} GB"
+                    except Exception:
+                        pass
+
+                    if len(parts) > 3 and parts[3] and parts[3] != "[Not Supported]":
+                        gpu["driver_version"] = parts[3]
+
+                    if len(parts) > 4:
+                        try:
+                            gpu["temperature_celsius"] = float(parts[4])
+                        except Exception:
+                            gpu["temperature_celsius"] = "Not supported"
+
+                    if len(parts) > 5:
+                        try:
+                            gpu["utilization_percent"] = float(parts[5])
+                        except Exception:
+                            gpu["utilization_percent"] = "Not supported"
+
                     gpu["type"] = "Discrete NVIDIA GPU"
+                    total_ram = psutil.virtual_memory().total
+                    gpu["shared_vram_bytes"] = total_ram // 2
+                    gpu["shared_vram_formatted"] = format_bytes(total_ram // 2)
                     return gpu
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"nvidia-smi execution error: {e}")
 
         sys_name = platform.system()
         if sys_name == "Windows":

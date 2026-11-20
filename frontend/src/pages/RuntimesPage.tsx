@@ -17,6 +17,9 @@ import {
   FileText,
   Copy,
   Check,
+  BookOpen,
+  ExternalLink,
+  Zap,
 } from 'lucide-react';
 import { useEngine } from '@/lib/context';
 import { useToast } from '@/lib/toast';
@@ -81,6 +84,28 @@ export function RuntimesPage() {
 
   const [dirsModalOpen, setDirsModalOpen] = useState(false);
   const [newDirectoryPath, setNewDirectoryPath] = useState('');
+
+  // Guide Modal
+  const [guideModalOpen, setGuideModalOpen] = useState(false);
+  const [selectedGuideRuntime, setSelectedGuideRuntime] = useState<string | null>(null);
+  const [guideData, setGuideData] = useState<any | null>(null);
+  const [isLoadingGuide, setIsLoadingGuide] = useState(false);
+
+  const handleOpenInstallGuide = async (runtimeId: string) => {
+    setSelectedGuideRuntime(runtimeId);
+    setGuideModalOpen(true);
+    setIsLoadingGuide(true);
+    try {
+      const res = await api.getRuntimeInstallGuide(runtimeId);
+      if (res && res.guide) {
+        setGuideData(res.guide);
+      }
+    } catch {
+      setGuideData(null);
+    } finally {
+      setIsLoadingGuide(false);
+    }
+  };
 
   // Process settings inputs
   const [llamaThreads, setLlamaThreads] = useState(config?.llama_cpp?.threads || 4);
@@ -290,6 +315,87 @@ export function RuntimesPage() {
     ? clientRuntimes?.ollama?.status === 'online'
     : !!ollama?.detected;
 
+  // Unified multi-runtime list
+  const defaultRuntimesList = [
+    {
+      runtime_id: 'llama.cpp server',
+      display_name: 'llama.cpp Server / CLI',
+      supported_formats: ['GGUF', 'Binary'],
+      icon: '⚡',
+      description: 'High-performance C++ LLM inference engine with multi-threaded CPU GEMM & GPU offloading',
+    },
+    {
+      runtime_id: 'ollama',
+      display_name: 'Ollama Service',
+      supported_formats: ['Ollama Registry', 'GGUF'],
+      icon: '🦙',
+      description: 'Streamlined local AI runtime that manages model downloads and OpenAI-compatible APIs',
+    },
+    {
+      runtime_id: 'transformers',
+      display_name: 'Hugging Face Transformers / PyTorch',
+      supported_formats: ['Safetensors', 'PyTorch (.bin)'],
+      icon: '🤗',
+      description: 'Standard Python deep learning ecosystem for running native PyTorch & Safetensors weights',
+    },
+    {
+      runtime_id: 'onnxruntime',
+      display_name: 'ONNX Runtime (DirectML / CPU)',
+      supported_formats: ['ONNX (.onnx)'],
+      icon: '⚡',
+      description: 'Cross-platform accelerator with native DirectML support across Intel, AMD, and NVIDIA',
+    },
+    {
+      runtime_id: 'mlx',
+      display_name: 'Apple Silicon MLX Framework',
+      supported_formats: ['MLX', 'Apple Safetensors'],
+      icon: '🍎',
+      description: 'Native Apple Silicon framework utilizing high-bandwidth unified memory on M-series chips',
+    },
+    {
+      runtime_id: 'exllamav2',
+      display_name: 'ExLlamaV2 (EXL2)',
+      supported_formats: ['EXL2', 'GPTQ'],
+      icon: '🚀',
+      description: 'Ultra-fast quantized inference library designed exclusively for modern NVIDIA GPUs with CUDA',
+    },
+    {
+      runtime_id: 'mlc_llm',
+      display_name: 'MLC LLM Engine',
+      supported_formats: ['MLC Compiled'],
+      icon: '⚙️',
+      description: 'Universal compilation-based runtime targeting Vulkan, Metal, and WebGPU on edge devices',
+    },
+    {
+      runtime_id: 'vllm',
+      display_name: 'vLLM Engine (PagedAttention)',
+      supported_formats: ['Safetensors', 'PyTorch'],
+      icon: '⚡',
+      description: 'High-throughput LLM serving engine featuring PagedAttention and OpenAI-compatible server',
+    },
+  ];
+
+  const allAdaptersMap = runtimes?.adapters || {};
+  const displayRuntimes = defaultRuntimesList.map((base) => {
+    const liveAdapter = allAdaptersMap[base.runtime_id] || (runtimes?.all_runtimes || []).find((r: any) => r.runtime_id === base.runtime_id);
+    return {
+      ...base,
+      ...(liveAdapter || {}),
+      display_name: liveAdapter?.display_name || base.display_name,
+      supported_formats: liveAdapter?.supported_formats || base.supported_formats,
+    };
+  });
+
+  const verifiedCount = displayRuntimes.filter((r) => {
+    if (r.runtime_id === 'llama.cpp server') {
+      return (isHosted && !isExactLocalEngine) ? clientRuntimes?.llama_cpp?.running : (r.available || r.installed);
+    }
+    if (r.runtime_id === 'ollama') {
+      return isOllamaOnline;
+    }
+    return Boolean(r.available || r.installed);
+  }).length;
+
   return (
     <div className="space-y-6">
       {/* Top Section: Model Registry Table */}
@@ -341,12 +447,22 @@ export function RuntimesPage() {
               <option value="all">All Runtimes</option>
               <option value="llama">llama.cpp server</option>
               <option value="ollama">Ollama</option>
+              <option value="transformers">Transformers / PyTorch</option>
+              <option value="onnx">ONNX Runtime</option>
+              <option value="mlx">Apple MLX</option>
+              <option value="exl">ExLlamaV2</option>
+              <option value="mlc">MLC LLM</option>
+              <option value="vllm">vLLM Engine</option>
             </Select>
             <Select value={formatFilter} onChange={(e) => setFormatFilter(e.target.value)} className="h-8 text-xs">
               <option value="all">All Formats</option>
-              <option value="gguf">GGUF</option>
-              <option value="ollama">Ollama</option>
-              <option value="safetensors">Safetensors</option>
+              <option value="gguf">GGUF (.gguf)</option>
+              <option value="safetensors">Safetensors (.safetensors)</option>
+              <option value="ollama">Ollama Manifests</option>
+              <option value="onnx">ONNX (.onnx)</option>
+              <option value="pytorch">PyTorch (.pt, .bin)</option>
+              <option value="mlx">Apple MLX</option>
+              <option value="exl">ExLlamaV2 (EXL2)</option>
             </Select>
             <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-8 text-xs">
               <option value="all">All Statuses</option>
@@ -456,338 +572,452 @@ export function RuntimesPage() {
         </CardContent>
       </Card>
 
-      {/* Runtime Manager Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* llama.cpp server */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  id="radio-llama"
-                  name="runtime-active"
-                  checked={activeRuntime === 'llama.cpp server'}
-                  onChange={() => switchRuntime('llama.cpp server')}
-                  className="cursor-pointer accent-primary"
-                />
-                <label htmlFor="radio-llama" className="text-sm font-semibold cursor-pointer">
-                  llama.cpp server mode
-                </label>
-              </div>
-              {isHosted && !isExactLocalEngine ? (
-                <Badge
-                  variant={clientRuntimes?.llama_cpp?.running ? 'success' : 'outline'}
-                  className="text-[10px] font-mono"
-                >
-                  {clientRuntimes?.llama_cpp?.running
-                    ? 'RUNNING & READY'
-                    : probeLlamaCpp
-                    ? 'NO SERVER ON :8080'
-                    : 'PROBE DISABLED'}
-                </Badge>
-              ) : (
-                <Badge variant={llama?.status?.healthy ? 'success' : llama?.status?.running ? 'warning' : 'outline'} className="text-[10px] font-mono">
-                  {llama?.status?.healthy ? 'RUNNING & READY' : llama?.status?.running ? 'STARTING' : 'STOPPED'}
-                </Badge>
-              )}
-            </div>
-            <CardDescription>Standalone high-performance C++ LLM inference engine</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4 text-xs">
-            <div className="space-y-2 p-3 rounded-lg border border-border bg-muted/20">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Binary Executable:</span>
-                <span className="font-mono text-foreground truncate max-w-[240px]" title={llama?.executable_path}>
-                  {llama?.executable_path || (isHosted ? 'Local host process' : 'Not detected')}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Process State:</span>
-                <span className="font-mono text-foreground">
-                  {isHosted && !isExactLocalEngine
-                    ? clientRuntimes?.llama_cpp?.running
-                      ? 'Detected on localhost:8080'
-                      : probeLlamaCpp
-                      ? 'No listener detected on 127.0.0.1:8080'
-                      : 'Probe disabled (prevent console logs)'
-                    : llama?.status?.running
-                    ? `PID ${llama.status.pid} on port ${llama.status.port}`
-                    : 'Not running'}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Resident Memory (RSS):</span>
-                <span className="font-mono text-foreground">
-                  {isHosted && !isExactLocalEngine
-                    ? (clientRuntimes?.llama_cpp?.running ? 'Active' : '0 B')
-                    : (llama?.status?.memory_rss_formatted || '0 B')}
-                </span>
-              </div>
-            </div>
+      {/* Dynamic Multi-Runtime Ecosystem Section */}
+      <div className="space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-3">
+          <div>
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <Server className="w-4 h-4 text-primary" />
+              Verified AI Runtime Ecosystem
+            </h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Multi-ecosystem runtime detection across local binaries, virtual environments, and system daemons
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="text-[10px] font-mono">
+              {verifiedCount} / {displayRuntimes.length} VERIFIED
+            </Badge>
+            <Badge variant="secondary" className="text-[10px] font-mono uppercase">
+              ACTIVE: {activeRuntime}
+            </Badge>
+          </div>
+        </div>
 
-            {isHosted && !isExactLocalEngine ? (
-              <div className="space-y-3 pt-1">
-                <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-background/50">
-                  <div className="space-y-0.5">
-                    <div className="text-xs font-medium text-foreground">Local Port Probe (:8080)</div>
-                    <div className="text-[11px] text-muted-foreground">
-                      {probeLlamaCpp
-                        ? 'Probing localhost:8080 for running llama-server instances'
-                        : 'Disabled to prevent browser ERR_CONNECTION_REFUSED log spam'}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+          {displayRuntimes.map((rt) => {
+            const isActive = activeRuntime.toLowerCase() === rt.runtime_id.toLowerCase();
+            const isLlama = rt.runtime_id === 'llama.cpp server';
+            const isOllamaRt = rt.runtime_id === 'ollama';
+
+            // Status badge determination
+            let badgeText = 'NOT INSTALLED';
+            let badgeVariant: 'success' | 'destructive' | 'outline' | 'secondary' | 'warning' = 'outline';
+
+            if (isLlama) {
+              if (isHosted && !isExactLocalEngine) {
+                if (clientRuntimes?.llama_cpp?.running) {
+                  badgeText = 'ACTIVE & RUNNING';
+                  badgeVariant = 'success';
+                } else if (probeLlamaCpp) {
+                  badgeText = 'NO SERVER ON :8080';
+                  badgeVariant = 'outline';
+                } else {
+                  badgeText = 'PROBE DISABLED';
+                  badgeVariant = 'outline';
+                }
+              } else {
+                if (llama?.status?.healthy) {
+                  badgeText = 'RUNNING & READY';
+                  badgeVariant = 'success';
+                } else if (llama?.status?.running) {
+                  badgeText = 'STARTING';
+                  badgeVariant = 'warning';
+                } else if (rt.installed || (llama?.executable_path && llama.executable_path !== 'Not configured')) {
+                  badgeText = 'INSTALLED & READY';
+                  badgeVariant = 'secondary';
+                } else {
+                  badgeText = 'NOT INSTALLED';
+                  badgeVariant = 'outline';
+                }
+              }
+            } else if (isOllamaRt) {
+              if (isOllamaOnline) {
+                badgeText = `CONNECTED (v${isHosted && !isExactLocalEngine ? (clientRuntimes?.ollama?.version || '0.x') : (ollama?.version || '0.x')})`;
+                badgeVariant = 'success';
+              } else if (isOllamaCorsBlocked) {
+                badgeText = 'CORS BLOCKED';
+                badgeVariant = 'warning';
+              } else {
+                badgeText = 'SERVICE OFFLINE';
+                badgeVariant = 'destructive';
+              }
+            } else {
+              if (rt.installed || rt.available) {
+                badgeText = rt.version && rt.version !== 'Unknown' && rt.version !== 'Unavailable'
+                  ? `VERIFIED (v${rt.version})`
+                  : 'VERIFIED & READY';
+                badgeVariant = 'success';
+              } else if (rt.runtime_id === 'mlx') {
+                badgeText = 'MACOS EXCLUSIVE';
+                badgeVariant = 'outline';
+              } else if (rt.runtime_id === 'exllamav2') {
+                badgeText = 'CUDA REQUIRED';
+                badgeVariant = 'outline';
+              } else {
+                badgeText = 'NOT INSTALLED';
+                badgeVariant = 'outline';
+              }
+            }
+
+            return (
+              <Card
+                key={rt.runtime_id}
+                className={cn(
+                  'flex flex-col justify-between transition-all duration-200',
+                  isActive && 'border-primary/50 shadow-sm bg-primary/[0.02]'
+                )}
+              >
+                <div>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          id={`radio-rt-${rt.runtime_id}`}
+                          name="runtime-active"
+                          checked={isActive}
+                          onChange={() => switchRuntime(rt.runtime_id)}
+                          className="cursor-pointer accent-primary"
+                        />
+                        <label
+                          htmlFor={`radio-rt-${rt.runtime_id}`}
+                          className="text-xs font-semibold cursor-pointer text-foreground flex items-center gap-1.5"
+                        >
+                          <span>{rt.icon}</span>
+                          <span className="truncate max-w-[130px]">{rt.display_name}</span>
+                        </label>
+                      </div>
+                      <Badge variant={badgeVariant} className="text-[9px] font-mono shrink-0">
+                        {badgeText}
+                      </Badge>
                     </div>
-                  </div>
+                    <CardDescription className="text-[11px] line-clamp-2 mt-1">
+                      {rt.description}
+                    </CardDescription>
+                  </CardHeader>
+
+                  <CardContent className="space-y-3 text-xs pt-0">
+                    {/* Key Details */}
+                    <div className="space-y-1.5 p-2.5 rounded-lg border border-border bg-muted/20 text-[11px]">
+                      <div className="flex justify-between items-center">
+                        <span className="text-muted-foreground">Detection:</span>
+                        <span className="font-mono text-foreground font-medium">
+                          {rt.detection_method ? rt.detection_method.replace(/_/g, ' ') : 'environment_scan'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-start gap-2">
+                        <span className="text-muted-foreground shrink-0">Executable / Path:</span>
+                        <span
+                          className="font-mono text-foreground text-right truncate max-w-[140px]"
+                          title={rt.executable_path || 'Not detected'}
+                        >
+                          {rt.executable_path || 'Not detected'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-start gap-2">
+                        <span className="text-muted-foreground shrink-0">Formats:</span>
+                        <div className="flex flex-wrap gap-1 justify-end">
+                          {rt.supported_formats.map((fmt: string) => (
+                            <Badge key={fmt} variant="outline" className="text-[9px] py-0 px-1 font-mono">
+                              {fmt}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Diagnostics message */}
+                    {rt.message && (
+                      <p className="text-[11px] text-muted-foreground italic border-l-2 border-primary/40 pl-2">
+                        {rt.message}
+                      </p>
+                    )}
+
+                    {/* Special section for llama.cpp parameters if local engine */}
+                    {isLlama && !isHosted && (
+                      <div className="space-y-2 pt-1 border-t border-border">
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <div>
+                            <label className="text-[10px] text-muted-foreground block">Threads</label>
+                            <input
+                              type="number"
+                              value={llamaThreads}
+                              onChange={(e) => setLlamaThreads(parseInt(e.target.value, 10) || 4)}
+                              className="w-full h-7 px-2 rounded border border-input bg-background font-mono text-xs"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-muted-foreground block">GPU Layers</label>
+                            <input
+                              type="number"
+                              value={llamaNgl}
+                              onChange={(e) => setLlamaNgl(parseInt(e.target.value, 10) || 0)}
+                              className="w-full h-7 px-2 rounded border border-input bg-background font-mono text-xs"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex gap-1.5 pt-1">
+                          <Button
+                            size="sm"
+                            onClick={handleStartLlama}
+                            disabled={isStartingLlama || llama?.status?.healthy}
+                            className="h-7 text-[11px] gap-1 flex-1"
+                          >
+                            <Play className="w-3 h-3 fill-current" />
+                            Start
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={handleStopLlama}
+                            disabled={isStoppingLlama || !llama?.status?.running}
+                            className="h-7 text-[11px] gap-1 flex-1"
+                          >
+                            <Square className="w-3 h-3 fill-current" />
+                            Stop
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Special section for llama.cpp hosted probe */}
+                    {isLlama && isHosted && !isExactLocalEngine && (
+                      <div className="flex items-center justify-between p-2 rounded border border-border bg-background/50">
+                        <span className="text-[11px] text-muted-foreground">Probe :8080:</span>
+                        <Button
+                          size="sm"
+                          variant={probeLlamaCpp ? 'default' : 'outline'}
+                          onClick={handleToggleLlamaProbe}
+                          className="h-6 text-[10px] px-2"
+                        >
+                          {probeLlamaCpp ? 'Probing On' : 'Enable Probe'}
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* Special section for Ollama actions */}
+                    {isOllamaRt && (
+                      <div className="space-y-2 pt-1 border-t border-border">
+                        <div className="flex gap-1.5">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={handleTestOllamaConnection}
+                            disabled={isTestingOllama}
+                            className="h-7 text-[11px] gap-1 flex-1"
+                          >
+                            <RefreshCw className={cn('w-3 h-3', isTestingOllama && 'animate-spin')} />
+                            Test Connection
+                          </Button>
+                          {isHosted && !isExactLocalEngine && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setShowCorsHelp((prev) => !prev)}
+                              className="h-7 text-[11px] px-2 text-muted-foreground"
+                            >
+                              CORS
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </div>
+
+                {/* Card Footer with Setup Guide link */}
+                <div className="p-3 pt-0 border-t border-border/50 mt-2 flex items-center justify-between">
                   <Button
                     size="sm"
-                    variant={probeLlamaCpp ? 'default' : 'outline'}
-                    onClick={handleToggleLlamaProbe}
-                    className="h-7 text-xs px-2.5"
+                    variant="ghost"
+                    onClick={() => handleOpenInstallGuide(rt.runtime_id)}
+                    className="h-6 text-[11px] gap-1 px-1.5 text-muted-foreground hover:text-foreground"
                   >
-                    {probeLlamaCpp ? 'Probing On' : 'Enable Probe'}
+                    <BookOpen className="w-3 h-3" />
+                    Setup Guide
                   </Button>
+                  <Button
+                    size="sm"
+                    variant={isActive ? 'secondary' : 'default'}
+                    onClick={() => switchRuntime(rt.runtime_id)}
+                    className="h-6 text-[11px] px-2.5"
+                  >
+                    {isActive ? 'Active' : 'Use Runtime'}
+                  </Button>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+
+        {/* Ollama CORS Help Accordion (if open or blocked) */}
+        {(isOllamaCorsBlocked || showCorsHelp) && (
+          <div className="p-3.5 rounded-lg border border-amber-500/40 bg-amber-500/10 space-y-3">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <div className="text-xs font-semibold text-amber-300">
+                  Ollama is running but blocking this website (CORS)
                 </div>
                 <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  Subprocess management is handled by your local engine daemon. When browsing the hosted dashboard, run <code className="font-mono text-foreground">llama-server --port 8080 -m &lt;model.gguf&gt;</code> on your machine and enable probing.
+                  Browsers enforce Cross-Origin Resource Sharing (CORS) when connecting to local <code className="text-foreground">127.0.0.1:11434</code>. Allow this origin with one of the commands below:
                 </p>
               </div>
-            ) : (
-              <>
-                {/* Launch parameters */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
-                  <div>
-                    <label className="text-[11px] text-muted-foreground block mb-1">Threads (-t)</label>
-                    <input
-                      type="number"
-                      value={llamaThreads}
-                      onChange={(e) => setLlamaThreads(parseInt(e.target.value, 10) || 4)}
-                      className="w-full h-8 px-2 rounded border border-input bg-background font-mono text-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-muted-foreground block mb-1">GPU Layers (-ngl)</label>
-                    <input
-                      type="number"
-                      value={llamaNgl}
-                      onChange={(e) => setLlamaNgl(parseInt(e.target.value, 10) || 0)}
-                      className="w-full h-8 px-2 rounded border border-input bg-background font-mono text-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-muted-foreground block mb-1">Context (-c)</label>
-                    <input
-                      type="number"
-                      value={llamaCtx}
-                      onChange={(e) => setLlamaCtx(parseInt(e.target.value, 10) || 2048)}
-                      className="w-full h-8 px-2 rounded border border-input bg-background font-mono text-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-muted-foreground block mb-1">Port</label>
-                    <input
-                      type="number"
-                      value={llamaPort}
-                      onChange={(e) => setLlamaPort(parseInt(e.target.value, 10) || 8080)}
-                      className="w-full h-8 px-2 rounded border border-input bg-background font-mono text-xs"
-                    />
-                  </div>
-                </div>
+            </div>
 
-                <div className="flex gap-2 pt-2">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2 pt-1">
+              <div className="rounded-md border border-border bg-background/80 p-2.5 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-medium text-foreground">Windows Session</span>
                   <Button
                     size="sm"
-                    onClick={handleStartLlama}
-                    disabled={isStartingLlama || llama?.status?.healthy}
-                    className="gap-1.5 text-xs flex-1"
+                    variant="ghost"
+                    className="h-6 px-1.5 text-xs gap-1"
+                    onClick={() => handleCopy('ps', `$env:OLLAMA_ORIGINS="${typeof window !== 'undefined' ? window.location.origin : 'https://lmlhe.onrender.com'}"; ollama serve`)}
                   >
-                    <Play className="w-3.5 h-3.5 fill-current" />
-                    Start Server Process
+                    {copiedKey === 'ps' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                   </Button>
+                </div>
+                <pre className="p-1.5 rounded bg-muted/80 font-mono text-[10px] text-primary overflow-x-auto select-all">
+                  {`$env:OLLAMA_ORIGINS="${typeof window !== 'undefined' ? window.location.origin : 'https://lmlhe.onrender.com'}"; ollama serve`}
+                </pre>
+              </div>
+
+              <div className="rounded-md border border-border bg-background/80 p-2.5 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-medium text-foreground">Windows Permanent</span>
                   <Button
                     size="sm"
-                    variant="secondary"
-                    onClick={handleStopLlama}
-                    disabled={isStoppingLlama || !llama?.status?.running}
-                    className="gap-1.5 text-xs flex-1"
+                    variant="ghost"
+                    className="h-6 px-1.5 text-xs gap-1"
+                    onClick={() => handleCopy('setx', `setx OLLAMA_ORIGINS "${typeof window !== 'undefined' ? window.location.origin : 'https://lmlhe.onrender.com'}"`)}
                   >
-                    <Square className="w-3.5 h-3.5 fill-current" />
-                    Stop Server
+                    {copiedKey === 'setx' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                   </Button>
                 </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
+                <pre className="p-1.5 rounded bg-muted/80 font-mono text-[10px] text-primary overflow-x-auto select-all">
+                  {`setx OLLAMA_ORIGINS "${typeof window !== 'undefined' ? window.location.origin : 'https://lmlhe.onrender.com'}"`}
+                </pre>
+              </div>
 
-        {/* Ollama runtime */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  id="radio-ollama"
-                  name="runtime-active"
-                  checked={activeRuntime === 'ollama'}
-                  onChange={() => switchRuntime('ollama')}
-                  className="cursor-pointer accent-primary"
-                />
-                <label htmlFor="radio-ollama" className="text-sm font-semibold cursor-pointer">
-                  Ollama Service Integration
-                </label>
-              </div>
-              {isOllamaOnline ? (
-                <Badge variant="success" className="text-[10px] font-mono">
-                  CONNECTED (v{isHosted && !isExactLocalEngine ? (clientRuntimes?.ollama?.version || '0.x') : (ollama?.version || '0.x')})
-                </Badge>
-              ) : isOllamaCorsBlocked ? (
-                <Badge className="text-[10px] font-mono bg-amber-500/15 text-amber-400 border border-amber-500/30">
-                  CORS BLOCKED
-                </Badge>
-              ) : (
-                <Badge variant="destructive" className="text-[10px] font-mono">
-                  SERVICE OFFLINE
-                </Badge>
-              )}
-            </div>
-            <CardDescription>Managed local Ollama daemon integration</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4 text-xs">
-            <div className="space-y-2 p-3 rounded-lg border border-border bg-muted/20">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Service API Endpoint:</span>
-                <span className="font-mono text-foreground">
-                  {isHosted && !isExactLocalEngine
-                    ? (clientRuntimes?.ollama?.base_url || 'http://127.0.0.1:11434')
-                    : ((ollama as any)?.base_url || (ollama as any)?.url || 'http://127.0.0.1:11434')}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Daemon Version:</span>
-                <span className="font-mono text-foreground">
-                  {isHosted && !isExactLocalEngine
-                    ? (clientRuntimes?.ollama?.version || (isOllamaCorsBlocked ? 'Detected (CORS blocked)' : 'Unavailable'))
-                    : (ollama?.version || 'Unavailable')}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Installed Models:</span>
-                <span className="font-mono text-foreground">
-                  {isHosted && !isExactLocalEngine
-                    ? `${clientRuntimes?.ollama?.models?.length || 0} models detected`
-                    : `${models.filter(m => m.runtime_compatibility.includes('ollama')).length} models`}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Running in Memory:</span>
-                <span className="font-mono text-primary truncate max-w-[240px]">
-                  {isHosted && !isExactLocalEngine
-                    ? (((clientRuntimes?.ollama?.running_models || []) as any[]).map((m: any) => typeof m === 'string' ? m : m?.name || m).join(', ') || 'None in memory')
-                    : (((ollama?.running_models || []) as any[]).map((m: any) => typeof m === 'string' ? m : m?.name || m).join(', ') || 'None in memory')}
-                </span>
-              </div>
-            </div>
-
-            {/* CORS Blocked / Help Section */}
-            {(isOllamaCorsBlocked || showCorsHelp) && (
-              <div className="p-3.5 rounded-lg border border-amber-500/40 bg-amber-500/10 space-y-3">
-                <div className="flex items-start gap-2">
-                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                  <div className="space-y-1">
-                    <div className="text-xs font-semibold text-amber-300">
-                      Ollama is running but blocking this website
-                    </div>
-                    <p className="text-[11px] text-muted-foreground leading-relaxed">
-                      Browsers enforce Cross-Origin Resource Sharing (CORS) when a secure hosted site (<code className="text-foreground">{typeof window !== 'undefined' ? window.location.origin : 'https://lmlhe.onrender.com'}</code>) connects to your local <code className="text-foreground">127.0.0.1:11434</code>. Allow this origin in Ollama with one of the commands below:
-                    </p>
-                  </div>
+              <div className="rounded-md border border-border bg-background/80 p-2.5 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-medium text-foreground">macOS / Linux</span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 px-1.5 text-xs gap-1"
+                    onClick={() => handleCopy('mac', `OLLAMA_ORIGINS="${typeof window !== 'undefined' ? window.location.origin : 'https://lmlhe.onrender.com'}" ollama serve`)}
+                  >
+                    {copiedKey === 'mac' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                  </Button>
                 </div>
-
-                <div className="space-y-2 pt-1">
-                  <div className="rounded-md border border-border bg-background/80 p-2.5 space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-medium text-foreground">Windows PowerShell (Current Session)</span>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-6 px-2 text-xs gap-1"
-                        onClick={() => handleCopy('ps', `$env:OLLAMA_ORIGINS="${typeof window !== 'undefined' ? window.location.origin : 'https://lmlhe.onrender.com'}"; ollama serve`)}
-                      >
-                        {copiedKey === 'ps' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                        <span>{copiedKey === 'ps' ? 'Copied' : 'Copy'}</span>
-                      </Button>
-                    </div>
-                    <pre className="p-1.5 rounded bg-muted/80 font-mono text-[11px] text-primary overflow-x-auto select-all">
-                      {`$env:OLLAMA_ORIGINS="${typeof window !== 'undefined' ? window.location.origin : 'https://lmlhe.onrender.com'}"; ollama serve`}
-                    </pre>
-                  </div>
-
-                  <div className="rounded-md border border-border bg-background/80 p-2.5 space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-medium text-foreground">Windows Permanent (setx)</span>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-6 px-2 text-xs gap-1"
-                        onClick={() => handleCopy('setx', `setx OLLAMA_ORIGINS "${typeof window !== 'undefined' ? window.location.origin : 'https://lmlhe.onrender.com'}"`)}
-                      >
-                        {copiedKey === 'setx' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                        <span>{copiedKey === 'setx' ? 'Copied' : 'Copy'}</span>
-                      </Button>
-                    </div>
-                    <pre className="p-1.5 rounded bg-muted/80 font-mono text-[11px] text-primary overflow-x-auto select-all">
-                      {`setx OLLAMA_ORIGINS "${typeof window !== 'undefined' ? window.location.origin : 'https://lmlhe.onrender.com'}"`}
-                    </pre>
-                    <p className="text-[10px] text-muted-foreground">
-                      Note: After running setx, right-click Ollama in the Windows taskbar tray &rarr; <strong>Quit Ollama</strong>, then relaunch Ollama.
-                    </p>
-                  </div>
-
-                  <div className="rounded-md border border-border bg-background/80 p-2.5 space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-medium text-foreground">macOS / Linux</span>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-6 px-2 text-xs gap-1"
-                        onClick={() => handleCopy('mac', `OLLAMA_ORIGINS="${typeof window !== 'undefined' ? window.location.origin : 'https://lmlhe.onrender.com'}" ollama serve`)}
-                      >
-                        {copiedKey === 'mac' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                        <span>{copiedKey === 'mac' ? 'Copied' : 'Copy'}</span>
-                      </Button>
-                    </div>
-                    <pre className="p-1.5 rounded bg-muted/80 font-mono text-[11px] text-primary overflow-x-auto select-all">
-                      {`OLLAMA_ORIGINS="${typeof window !== 'undefined' ? window.location.origin : 'https://lmlhe.onrender.com'}" ollama serve`}
-                    </pre>
-                  </div>
-                </div>
+                <pre className="p-1.5 rounded bg-muted/80 font-mono text-[10px] text-primary overflow-x-auto select-all">
+                  {`OLLAMA_ORIGINS="${typeof window !== 'undefined' ? window.location.origin : 'https://lmlhe.onrender.com'}" ollama serve`}
+                </pre>
               </div>
-            )}
-
-            <div className="flex items-center justify-between gap-2 pt-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleTestOllamaConnection}
-                disabled={isTestingOllama}
-                className="w-full text-xs gap-1.5"
-              >
-                <RefreshCw className={cn('w-3.5 h-3.5', isTestingOllama && 'animate-spin')} />
-                Test Ollama Connection
-              </Button>
-              {isHosted && !isExactLocalEngine && !isOllamaCorsBlocked && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setShowCorsHelp((prev) => !prev)}
-                  className="text-xs text-muted-foreground shrink-0"
-                >
-                  {showCorsHelp ? 'Hide CORS Guide' : 'CORS Guide'}
-                </Button>
-              )}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        )}
       </div>
+
+      {/* Runtime Installation & Setup Guide Dialog */}
+      <Dialog open={guideModalOpen} onOpenChange={setGuideModalOpen}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <BookOpen className="w-4 h-4 text-primary" />
+              Runtime Installation & Setup Guide
+            </DialogTitle>
+            <DialogDescription>
+              {selectedGuideRuntime}
+            </DialogDescription>
+          </DialogHeader>
+
+          {isLoadingGuide ? (
+            <div className="py-8 text-center text-xs text-muted-foreground">
+              <RefreshCw className="w-5 h-5 mx-auto animate-spin mb-2" />
+              Loading setup instructions...
+            </div>
+          ) : guideData ? (
+            <div className="space-y-4 py-2 text-xs">
+              <div className="p-3 rounded-lg border border-border bg-muted/20 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-sm text-foreground flex items-center gap-2">
+                    <span>{guideData.icon}</span>
+                    <span>{guideData.display_name}</span>
+                  </span>
+                  <Badge variant="outline" className="text-[10px]">
+                    {guideData.runtime_id}
+                  </Badge>
+                </div>
+                <p className="text-muted-foreground leading-relaxed">{guideData.description}</p>
+                {guideData.recommended_for && (
+                  <div className="text-[11px] text-foreground font-medium pt-1">
+                    <span className="text-muted-foreground">Best suited for: </span>
+                    {guideData.recommended_for}
+                  </div>
+                )}
+              </div>
+
+              {/* Install Instructions */}
+              {guideData.install_instructions && guideData.install_instructions.length > 0 && (
+                <div className="space-y-1.5">
+                  <span className="font-semibold text-foreground">Step-by-Step Instructions:</span>
+                  <ul className="list-disc list-inside space-y-1 text-muted-foreground pl-1">
+                    {guideData.install_instructions.map((step: string, i: number) => (
+                      <li key={i} className="leading-relaxed">{step}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* One-Click Commands */}
+              {guideData.one_click_commands && (
+                <div className="space-y-2 pt-2">
+                  <span className="font-semibold text-foreground">Installation Commands by Platform:</span>
+                  {Object.entries(guideData.one_click_commands).map(([plat, cmd]: [string, any]) => (
+                    <div key={plat} className="rounded-lg border border-border bg-background p-2.5 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-foreground text-[11px]">{plat}</span>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleCopy(`guide_${plat}`, String(cmd))}
+                          className="h-6 px-2 text-xs gap-1"
+                        >
+                          {copiedKey === `guide_${plat}` ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                          <span>{copiedKey === `guide_${plat}` ? 'Copied' : 'Copy'}</span>
+                        </Button>
+                      </div>
+                      <pre className="p-2 rounded bg-muted/60 font-mono text-[11px] text-primary overflow-x-auto select-all">
+                        {String(cmd)}
+                      </pre>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Verification */}
+              {guideData.verification_steps && (
+                <div className="p-3 rounded-lg border border-border bg-muted/10 space-y-1">
+                  <span className="font-medium text-foreground">Verification:</span>
+                  <p className="text-muted-foreground font-mono text-[11px]">{guideData.verification_steps}</p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="py-6 text-center text-xs text-muted-foreground">
+              Instructions unavailable for this runtime.
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button onClick={() => setGuideModalOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Model Technical Details Dialog */}
       <Dialog open={detailsModalOpen} onOpenChange={setDetailsModalOpen}>

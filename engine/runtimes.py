@@ -1,5 +1,7 @@
 import importlib.util
+import json
 import logging
+import os
 import platform
 import shutil
 import subprocess
@@ -285,6 +287,53 @@ def start_ollama_runtime(model: ModelEntry) -> Dict[str, Any]:
     }
 
 
+def get_common_model_directories() -> List[Path]:
+    """
+    Returns standard locations across Windows, macOS, and Linux where local AI tools store models:
+    - Hugging Face cache hub (~/.cache/huggingface/hub)
+    - Ollama manifests & blob storage (~/.ollama/models)
+    - LM Studio cache (~/.cache/lm-studio/models, ~/.lmstudio/models)
+    - GPT4All models directory (%LOCALAPPDATA%/nomic.ai/GPT4All, ~/.local/share/nomic.ai/GPT4All)
+    - Workspace 'models' directory
+    """
+    candidates: List[Path] = [
+        BASE_DIR / "models",
+    ]
+    home = Path.home()
+    candidates.extend([
+        home / ".cache" / "huggingface" / "hub",
+        home / ".cache" / "lm-studio" / "models",
+        home / ".lmstudio" / "models",
+        home / "models",
+    ])
+    sys_name = platform.system()
+    if sys_name == "Windows":
+        localappdata = os.environ.get("LOCALAPPDATA", "")
+        if localappdata:
+            candidates.append(Path(localappdata) / "nomic.ai" / "GPT4All")
+            candidates.append(Path(localappdata) / "LM Studio" / "models")
+        userprofile = os.environ.get("USERPROFILE", "")
+        if userprofile:
+            candidates.append(Path(userprofile) / ".ollama" / "models")
+    else:
+        candidates.extend([
+            home / ".local" / "share" / "nomic.ai" / "GPT4All",
+            home / ".ollama" / "models",
+        ])
+
+    existing: List[Path] = []
+    seen = set()
+    for c in candidates:
+        try:
+            resolved = c.resolve()
+            if resolved.is_dir() and str(resolved) not in seen:
+                seen.add(str(resolved))
+                existing.append(resolved)
+        except Exception:
+            pass
+    return existing
+
+
 def scan_and_update_models(refresh_only: bool = False) -> List[ModelEntry]:
     cfg = load_config()
     existing_catalog = load_models_catalog()
@@ -301,19 +350,20 @@ def scan_and_update_models(refresh_only: bool = False) -> List[ModelEntry]:
                 active_ollama_tags.add(tag)
 
     for m in existing_catalog:
-        if m.source in ("local_directory", "manual_addition"):
+        if m.source in ("local_directory", "manual_addition", "huggingface_cache", "lm_studio", "ollama_disk"):
             p = Path(m.path)
             if not p.is_absolute():
                 p = (BASE_DIR / p).resolve()
-            if p.is_file():
+            if p.is_file() or p.is_dir():
                 m.is_available = True
                 m.status_message = "Available"
-                m.size_bytes = p.stat().st_size
-                m.size_formatted = format_bytes(m.size_bytes)
+                if p.is_file():
+                    m.size_bytes = p.stat().st_size
+                    m.size_formatted = format_bytes(m.size_bytes)
                 updated[m.id] = m
             else:
                 m.is_available = False
-                m.status_message = "File missing on disk"
+                m.status_message = "File or folder missing on disk"
                 updated[m.id] = m
         elif m.source == "ollama_api":
             if ollama_stat["reachable"]:
@@ -326,11 +376,29 @@ def scan_and_update_models(refresh_only: bool = False) -> List[ModelEntry]:
                     m.status_message = "Model no longer in Ollama"
                     updated[m.id] = m
             else:
-                m.is_available = False
-                m.status_message = "Ollama service offline"
-                updated[m.id] = m
+                # If daemon is offline, check if manifests exist locally
+                has_manifest = False
+                try:
+                    m_path = Path.home() / ".ollama" / "models" / "manifests" / "registry.ollama.ai" / "library" / m.name.replace(":", "/")
+                    if not m_path.is_file() and platform.system() == "Windows":
+                        up = os.environ.get("USERPROFILE", "")
+                        if up:
+                            m_path = Path(up) / ".ollama" / "models" / "manifests" / "registry.ollama.ai" / "library" / m.name.replace(":", "/")
+                    has_manifest = m_path.is_file()
+                except Exception:
+                    pass
+
+                if has_manifest:
+                    m.is_available = True
+                    m.status_message = "Installed locally in Ollama (service stopped)"
+                    updated[m.id] = m
+                else:
+                    m.is_available = False
+                    m.status_message = "Ollama service offline"
+                    updated[m.id] = m
 
     if not refresh_only:
+        # 1. Scan Ollama API if reachable
         if ollama_stat["reachable"]:
             raw_ollama = OllamaManager.list_models(cfg.ollama.base_url)
             for om in raw_ollama:
@@ -371,15 +439,152 @@ def scan_and_update_models(refresh_only: bool = False) -> List[ModelEntry]:
                     modified_at=om.get("modified_at"),
                 )
                 updated[clean_id] = entry
+        else:
+            # Check Ollama manifests on disk even if daemon is stopped
+            ollama_manifest_dirs = [
+                Path.home() / ".ollama" / "models" / "manifests" / "registry.ollama.ai",
+            ]
+            if platform.system() == "Windows":
+                up = os.environ.get("USERPROFILE", "")
+                if up:
+                    ollama_manifest_dirs.append(Path(up) / ".ollama" / "models" / "manifests" / "registry.ollama.ai")
 
+            for mdir in ollama_manifest_dirs:
+                if mdir.is_dir():
+                    for mf in mdir.rglob("*"):
+                        if mf.is_file():
+                            try:
+                                rel = mf.relative_to(mdir)
+                                tag = str(rel).replace("\\", "/").replace("library/", "")
+                                clean_id = f"ollama_{tag.replace(':', '_').replace('.', '_').replace('/', '_')}"
+                                if clean_id not in updated:
+                                    with open(mf, "r", encoding="utf-8") as f_mf:
+                                        m_data = json.load(f_mf)
+                                    layers = m_data.get("layers", [])
+                                    total_sz = sum(l.get("size", 0) for l in layers)
+                                    entry = ModelEntry(
+                                        id=clean_id,
+                                        name=tag.replace("/", ":") if "/" in tag else tag,
+                                        file_name=tag.split("/")[-1],
+                                        path=tag,
+                                        format="Ollama",
+                                        quantization="Q4/Q8",
+                                        size_bytes=total_sz,
+                                        size_formatted=format_bytes(total_sz),
+                                        architecture="llama",
+                                        parameter_size="1B-7B",
+                                        context_length=4096,
+                                        runtime_compatibility=["ollama"],
+                                        is_available=True,
+                                        status_message="Installed locally in Ollama (service stopped)",
+                                        location_drive="System Disk",
+                                        source="ollama_disk",
+                                    )
+                                    updated[clean_id] = entry
+                            except Exception as ex:
+                                logger.debug(f"Ollama manifest read error: {ex}")
+
+        # 2. Gather directories to scan: configured + common AI locations
+        scan_dirs = []
         for d_str in cfg.model_directories:
             p = (BASE_DIR / d_str).resolve() if not Path(d_str).is_absolute() else Path(d_str)
-            if not p.is_dir():
+            if p.is_dir() and p not in scan_dirs:
+                scan_dirs.append(p)
+        for cd in get_common_model_directories():
+            if cd not in scan_dirs:
+                scan_dirs.append(cd)
+
+        seen_paths = set()
+        for p in scan_dirs:
+            # Special handling for Hugging Face Hub cache
+            if "huggingface" in str(p).lower() and "hub" in str(p).lower():
+                for m_dir in p.glob("models--*"):
+                    repo_name = m_dir.name.replace("models--", "").replace("--", "/")
+                    snaps_dir = m_dir / "snapshots"
+                    if not snaps_dir.is_dir():
+                        continue
+                    for snap in snaps_dir.iterdir():
+                        if not snap.is_dir():
+                            continue
+
+                        # Check for GGUF files in HF snapshot
+                        for gguf_file in snap.glob("*.gguf"):
+                            if str(gguf_file) in seen_paths or gguf_file.name in seen_paths:
+                                continue
+                            seen_paths.add(str(gguf_file))
+                            seen_paths.add(gguf_file.name)
+                            clean_id = gguf_file.stem.lower().replace(" ", "_").replace(".", "_")
+                            meta = parse_gguf_metadata(gguf_file)
+                            sz = gguf_file.stat().st_size
+                            updated[clean_id] = ModelEntry(
+                                id=clean_id,
+                                name=gguf_file.name,
+                                file_name=gguf_file.name,
+                                path=str(gguf_file.resolve()),
+                                format="GGUF",
+                                quantization=meta.get("quantization", "Unknown"),
+                                size_bytes=sz,
+                                size_formatted=format_bytes(sz),
+                                architecture=meta.get("architecture", "gguf"),
+                                parameter_size=meta.get("size_label", "Custom") or "Custom",
+                                context_length=meta.get("context_length", 4096),
+                                runtime_compatibility=["llama.cpp server", "ollama"],
+                                is_available=True,
+                                status_message="Available in Hugging Face cache",
+                                location_drive=gguf_file.drive if gguf_file.drive else "Drive",
+                                source="huggingface_cache",
+                            )
+
+                        # Check for Safetensors / PyTorch models in HF snapshot
+                        cfg_file = snap / "config.json"
+                        if cfg_file.is_file():
+                            st_files = list(snap.glob("*.safetensors"))
+                            bin_files = list(snap.glob("*.bin"))
+                            if st_files or bin_files:
+                                model_files = st_files or bin_files
+                                total_sz = sum(f.stat().st_size for f in model_files)
+                                clean_id = f"hf_{repo_name.replace('/', '_').replace('.', '_').replace('-', '_')}"
+                                if clean_id not in updated and repo_name not in seen_paths:
+                                    seen_paths.add(repo_name)
+                                    try:
+                                        with open(cfg_file, "r", encoding="utf-8") as f_cfg:
+                                            cfg_data = json.load(f_cfg)
+                                        arch = cfg_data.get("model_type") or (cfg_data.get("architectures", ["transformer"])[0] if cfg_data.get("architectures") else "transformer")
+                                        ctx = cfg_data.get("max_position_embeddings", 2048)
+                                    except Exception:
+                                        arch = "transformer"
+                                        ctx = 2048
+
+                                    fmt = "Safetensors" if st_files else "PyTorch"
+                                    rts = ["transformers", "mlx", "exllamav2"] if fmt == "Safetensors" else ["transformers"]
+                                    updated[clean_id] = ModelEntry(
+                                        id=clean_id,
+                                        name=repo_name,
+                                        file_name=repo_name.split("/")[-1],
+                                        path=str(snap.resolve()),
+                                        format=fmt,
+                                        quantization="BF16/F16" if fmt == "Safetensors" else "FP32",
+                                        size_bytes=total_sz,
+                                        size_formatted=format_bytes(total_sz),
+                                        architecture=arch,
+                                        parameter_size="Custom",
+                                        context_length=ctx,
+                                        runtime_compatibility=rts,
+                                        is_available=True,
+                                        status_message="Available in Hugging Face cache",
+                                        location_drive=snap.drive if snap.drive else "Drive",
+                                        source="huggingface_cache",
+                                    )
                 continue
 
+            # Standard model folder scan (direct files)
             for file in p.glob("*.*"):
                 suffix = file.suffix.lower()
                 if suffix in [".gguf", ".bin", ".safetensors", ".onnx", ".pt", ".pth", ".exl2"]:
+                    if str(file) in seen_paths or file.name in seen_paths:
+                        continue
+                    seen_paths.add(str(file))
+                    seen_paths.add(file.name)
                     clean_id = file.stem.lower().replace(" ", "_").replace(".", "_")
                     size = file.stat().st_size
                     location_drive = file.drive if file.drive else ("SSD" if "C:" in str(file) else "Drive")
@@ -515,12 +720,17 @@ class LlamaCppAdapter(BaseRuntimeAdapter):
     def detect(self) -> Dict[str, Any]:
         cfg = load_config()
         exe = cfg.llama_cpp.executable_path or find_system_llama_server()
-        is_found = bool(exe and Path(exe).is_file())
+        is_installed = bool(exe and Path(exe).is_file())
+        is_running = llama_manager.is_running()
+        is_available = is_installed or is_running
         return {
-            "available": is_found,
+            "available": is_available,
+            "installed": is_installed,
+            "running": is_running,
             "executable_path": exe or "Not configured",
-            "version": "llama.cpp server",
-            "message": "Binary located" if is_found else "Binary not found in standard paths",
+            "version": "llama.cpp server" if is_available else "Not installed",
+            "detection_method": "managed_subprocess" if is_running else ("executable_binary" if is_installed else "none"),
+            "message": "Running & ready" if is_running else ("Binary located on disk" if is_installed else "Binary not found in system PATH"),
         }
 
     def test_connection(self) -> bool:
@@ -540,7 +750,7 @@ class LlamaCppAdapter(BaseRuntimeAdapter):
 
     def validate_model(self, model: ModelEntry) -> Dict[str, Any]:
         is_fmt = any(f.lower() in model.format.lower() for f in ["gguf", "bin"])
-        p_ok = Path(model.path).is_file() if model.source in ("local_directory", "manual_addition") else True
+        p_ok = Path(model.path).is_file() if model.source in ("local_directory", "manual_addition", "huggingface_cache") else True
         compat = is_fmt and p_ok
         return {
             "compatible": compat,
@@ -567,7 +777,7 @@ class LlamaCppAdapter(BaseRuntimeAdapter):
             raise HTTPException(status_code=400, detail="Active model required to start llama-server")
 
         # If model is Ollama format, route to start_ollama_runtime gracefully
-        if target_model.format == "Ollama" or target_model.source == "ollama_api":
+        if target_model.format == "Ollama" or target_model.source in ("ollama_api", "ollama_disk"):
             return start_ollama_runtime(target_model)
 
         return llama_manager.start(
@@ -599,12 +809,29 @@ class OllamaAdapter(BaseRuntimeAdapter):
     def detect(self) -> Dict[str, Any]:
         cfg = load_config()
         stat = OllamaManager.get_status(cfg.ollama.base_url)
+        exe = shutil.which("ollama")
+        if not exe and platform.system() == "Windows":
+            p = os.path.expandvars(r"%LOCALAPPDATA%\Programs\Ollama\ollama.exe")
+            if os.path.isfile(p):
+                exe = p
+            else:
+                p2 = os.path.expandvars(r"%ProgramFiles%\Ollama\ollama.exe")
+                if os.path.isfile(p2):
+                    exe = p2
+        is_installed = bool(exe and Path(exe).is_file())
+        is_running = bool(stat["reachable"])
+        is_available = is_installed or is_running
+        msg = "Daemon connected and running" if is_running else ("Installed on system (daemon stopped)" if is_installed else "Not installed in standard paths")
         return {
-            "available": stat["reachable"],
-            "version": stat["version"],
+            "available": is_available,
+            "installed": is_installed,
+            "running": is_running,
+            "executable_path": str(exe) if exe else "Not found in standard paths",
+            "version": stat["version"] if is_running else ("Installed" if is_installed else "Unavailable"),
             "base_url": stat["base_url"],
             "running_models": stat["running_models"],
-            "message": "Connected to daemon" if stat["reachable"] else "Service offline",
+            "detection_method": "active_http_service" if is_running else ("executable_binary" if is_installed else "none"),
+            "message": msg,
         }
 
     def test_connection(self) -> bool:
@@ -628,11 +855,11 @@ class OllamaAdapter(BaseRuntimeAdapter):
     def validate_model(self, model: ModelEntry) -> Dict[str, Any]:
         stat = self.detect()
         if not stat["available"]:
-            return {"compatible": False, "message": "Ollama service offline"}
-        is_tag = model.source == "ollama_api" or model.format == "Ollama"
+            return {"compatible": False, "message": "Ollama is not installed or service offline"}
+        is_tag = model.source in ("ollama_api", "ollama_disk") or model.format == "Ollama"
         return {
             "compatible": is_tag or model.format == "GGUF",
-            "message": "Compatible with Ollama" if is_tag else "Requires Ollama model or Modelfile import",
+            "message": "Compatible with Ollama" if is_tag else "Requires Ollama model or GGUF import",
         }
 
     def get_configuration_options(self) -> Dict[str, Any]:
@@ -662,10 +889,13 @@ class TransformersAdapter(BaseRuntimeAdapter):
                 import transformers
                 ver = transformers.__version__
             except Exception:
-                pass
+                ver = "Installed"
         return {
             "available": is_avail,
+            "installed": is_avail,
             "version": ver,
+            "executable_path": "transformers Python module",
+            "detection_method": "python_environment",
             "packages_found": {"transformers": has_trans, "torch": has_torch},
             "message": f"v{ver} installed" if is_avail else "Not installed. Run: pip install transformers torch",
         }
@@ -717,18 +947,28 @@ class ONNXRuntimeAdapter(BaseRuntimeAdapter):
     supported_formats = ["ONNX"]
 
     def detect(self) -> Dict[str, Any]:
-        has_onnx = importlib.util.find_spec("onnxruntime") is not None or importlib.util.find_spec("onnxruntime_gpu") is not None
+        has_onnx = (
+            importlib.util.find_spec("onnxruntime") is not None
+            or importlib.util.find_spec("onnxruntime_gpu") is not None
+            or importlib.util.find_spec("onnxruntime_directml") is not None
+        )
         ver = "Unavailable"
+        providers = []
         if has_onnx:
             try:
-                import onnxruntime
-                ver = onnxruntime.__version__
+                import onnxruntime as ort
+                ver = ort.__version__
+                providers = ort.get_available_providers()
             except Exception:
-                pass
+                ver = "Installed"
         return {
             "available": has_onnx,
+            "installed": has_onnx,
             "version": ver,
-            "message": f"v{ver} installed" if has_onnx else "Not installed. Run: pip install onnxruntime",
+            "providers": providers,
+            "executable_path": "onnxruntime Python module",
+            "detection_method": "python_environment",
+            "message": f"v{ver} available ({', '.join(providers)})" if has_onnx else "Not installed. Run: pip install onnxruntime",
         }
 
     def test_connection(self) -> bool:
@@ -773,11 +1013,15 @@ class MLXAdapter(BaseRuntimeAdapter):
         is_arm = platform.machine() == "arm64"
         is_apple_silicon = is_darwin and is_arm
         has_mlx = importlib.util.find_spec("mlx") is not None
+        is_avail = is_apple_silicon and has_mlx
         return {
-            "available": is_apple_silicon and has_mlx,
+            "available": is_avail,
+            "installed": has_mlx,
             "platform_supported": is_apple_silicon,
             "version": "Apple Silicon MLX" if has_mlx else "Not installed",
-            "message": "Ready on Apple Silicon" if (is_apple_silicon and has_mlx) else (
+            "executable_path": "mlx / mlx_lm Python module",
+            "detection_method": "metal_unified_memory",
+            "message": "Ready on Apple Silicon" if is_avail else (
                 "Apple Silicon (macOS arm64) exclusive." if not is_apple_silicon else "Run: pip install mlx mlx-lm"
             ),
         }
@@ -824,11 +1068,15 @@ class ExLlamaV2Adapter(BaseRuntimeAdapter):
                 has_cuda = torch.cuda.is_available()
             except Exception:
                 pass
+        is_avail = has_pkg and has_cuda
         return {
-            "available": has_pkg and has_cuda,
+            "available": is_avail,
+            "installed": has_pkg,
             "cuda_available": has_cuda,
+            "executable_path": "exllamav2 C++/CUDA module",
+            "detection_method": "cuda_tensor_core",
             "version": "ExLlamaV2" if has_pkg else "Not installed",
-            "message": "Ready with CUDA" if (has_pkg and has_cuda) else (
+            "message": "Ready with CUDA" if is_avail else (
                 "Requires NVIDIA GPU with CUDA. Run: pip install exllamav2" if not has_pkg else "NVIDIA CUDA driver required"
             ),
         }
@@ -866,10 +1114,15 @@ class MLCLLMAdapter(BaseRuntimeAdapter):
 
     def detect(self) -> Dict[str, Any]:
         has_pkg = importlib.util.find_spec("mlc_llm") is not None
+        exe = shutil.which("mlc_llm")
+        is_avail = has_pkg or bool(exe)
         return {
-            "available": has_pkg,
-            "version": "MLC LLM" if has_pkg else "Not installed",
-            "message": "MLC Engine installed" if has_pkg else "Not installed. Run: pip install mlc-llm",
+            "available": is_avail,
+            "installed": is_avail,
+            "executable_path": exe or ("mlc_llm module" if has_pkg else "Not configured"),
+            "detection_method": "tvm_vulkan_metal",
+            "version": "MLC LLM" if is_avail else "Not installed",
+            "message": "MLC Engine installed" if is_avail else "Not installed. Run: pip install mlc-llm",
         }
 
     def test_connection(self) -> bool:
@@ -896,6 +1149,57 @@ class MLCLLMAdapter(BaseRuntimeAdapter):
         }
 
 
+class VLLMAdapter(BaseRuntimeAdapter):
+    runtime_id = "vllm"
+    display_name = "vLLM Engine (PagedAttention)"
+    supported_formats = ["Safetensors", "PyTorch"]
+
+    def detect(self) -> Dict[str, Any]:
+        has_pkg = importlib.util.find_spec("vllm") is not None
+        exe = shutil.which("vllm")
+        is_avail = has_pkg or bool(exe)
+        ver = "Unavailable"
+        if has_pkg:
+            try:
+                import vllm
+                ver = vllm.__version__
+            except Exception:
+                ver = "Installed"
+        return {
+            "available": is_avail,
+            "installed": is_avail,
+            "executable_path": exe or ("vllm module" if has_pkg else "Not configured"),
+            "detection_method": "paged_attention_server",
+            "version": ver,
+            "message": f"vLLM v{ver} ready" if is_avail else "Not installed. Run: pip install vllm",
+        }
+
+    def test_connection(self) -> bool:
+        return self.detect()["available"]
+
+    def get_capabilities(self) -> Dict[str, Any]:
+        return {
+            "paged_attention": True,
+            "continuous_batching": True,
+            "tensor_parallelism": True,
+            "openai_server": True,
+        }
+
+    def validate_model(self, model: ModelEntry) -> Dict[str, Any]:
+        is_fmt = any(f.lower() in model.format.lower() for f in ["safetensors", "pytorch", "bin"])
+        return {
+            "compatible": is_fmt,
+            "message": "Compatible Safetensors/PyTorch model" if is_fmt else "Requires Safetensors or PyTorch weights",
+        }
+
+    def get_configuration_options(self) -> Dict[str, Any]:
+        return {
+            "gpu_memory_utilization": [0.5, 0.7, 0.85, 0.9],
+            "max_model_len": [2048, 4096, 8192],
+            "tensor_parallel_size": [1, 2, 4],
+        }
+
+
 class RuntimeRegistry:
     def __init__(self):
         self._adapters: Dict[str, BaseRuntimeAdapter] = {
@@ -906,6 +1210,7 @@ class RuntimeRegistry:
             "mlx": MLXAdapter(),
             "exllamav2": ExLlamaV2Adapter(),
             "mlc_llm": MLCLLMAdapter(),
+            "vllm": VLLMAdapter(),
         }
 
     def get(self, runtime_id: str) -> Optional[BaseRuntimeAdapter]:
@@ -920,7 +1225,11 @@ class RuntimeRegistry:
                 "display_name": adapter.display_name,
                 "supported_formats": adapter.supported_formats,
                 "available": det.get("available", False),
+                "installed": det.get("installed", det.get("available", False)),
+                "running": det.get("running", False),
+                "executable_path": det.get("executable_path", ""),
                 "version": det.get("version", "Unknown"),
+                "detection_method": det.get("detection_method", "environment_scan"),
                 "message": det.get("message", ""),
                 "connected": adapter.test_connection(),
                 "capabilities": adapter.get_capabilities(),
@@ -937,6 +1246,8 @@ class RuntimeRegistry:
             "display_name": adapter.display_name,
             "supported_formats": adapter.supported_formats,
             "available": det.get("available", False),
+            "installed": det.get("installed", det.get("available", False)),
+            "running": det.get("running", False),
             "version": det.get("version", "Unknown"),
             "connected": adapter.test_connection(),
             "capabilities": adapter.get_capabilities(),
@@ -1142,5 +1453,25 @@ RUNTIME_INSTALL_GUIDES: Dict[str, Dict[str, Any]] = {
         "health_check_url": "",
         "docs_url": "https://mlc.ai",
         "verification_steps": "Verify with: mlc_llm --help",
+    },
+    "vllm": {
+        "runtime_id": "vllm",
+        "display_name": "vLLM Engine (PagedAttention)",
+        "description": "High-throughput and memory-efficient LLM serving engine featuring PagedAttention and OpenAI-compatible server.",
+        "icon": "⚡",
+        "supported_formats": ["SafeTensors", "PyTorch", "AWQ", "GPTQ"],
+        "recommended_for": "Production serving and high-concurrency batching on modern NVIDIA/AMD GPUs",
+        "install_instructions": [
+            "Prerequisite: Linux or Windows WSL2 with NVIDIA GPU (CUDA compute capability >= 7.0)",
+            "pip install vllm",
+        ],
+        "one_click_commands": {
+            "Windows": "wsl -- pip install vllm",
+            "Linux": "pip install vllm",
+            "macOS": "echo 'vLLM requires Linux with CUDA or ROCm'",
+        },
+        "health_check_url": "http://127.0.0.1:8000/health",
+        "docs_url": "https://docs.vllm.ai",
+        "verification_steps": "Verify with: vllm serve --help",
     },
 }

@@ -189,6 +189,27 @@ export function HardwarePage() {
                 {hardware?.cpu?.logical_threads || clientHardware?.cpu?.logical_threads || 1} Logical Threads
               </span>
             </div>
+            <div className="flex justify-between py-1.5 border-b border-border">
+              <span className="text-muted-foreground">CPU Instruction Sets</span>
+              <div className="flex items-center gap-1.5 font-mono text-[11px]">
+                {hardware?.cpu?.instruction_sets?.detected_list && hardware.cpu.instruction_sets.detected_list.length > 0 ? (
+                  <div className="flex flex-wrap gap-1 justify-end">
+                    {hardware.cpu.instruction_sets.detected_list.map((ins) => (
+                      <Badge key={ins} variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/30 py-0">
+                        {ins}
+                      </Badge>
+                    ))}
+                    <Badge variant="success" className="text-[9px] py-0 font-normal">
+                      Verified
+                    </Badge>
+                  </div>
+                ) : (
+                  <span className="text-muted-foreground">
+                    {hardware?.cpu?.instruction_sets_formatted || 'Unavailable (Browser sandbox)'}
+                  </span>
+                )}
+              </div>
+            </div>
             <div className="flex justify-between items-center py-1.5 border-b border-border">
               <span className="text-muted-foreground">Relative CPU Speed</span>
               <div className="flex items-center gap-2">
