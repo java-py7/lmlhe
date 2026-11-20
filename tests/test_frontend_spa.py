@@ -19,10 +19,6 @@ class TestFrontendSPA(unittest.TestCase):
             "/runtimes",
             "/inference",
             "/monitor",
-            "/benchmarks",
-            "/diagnostics",
-            "/api-config",
-            "/deployment",
         ]
         for route in spa_routes:
             res = self.client.get(route)

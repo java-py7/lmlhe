@@ -67,13 +67,6 @@ class TestProject2Engine(unittest.TestCase):
         self.assertIn("ram", data)
         self.assertIn("inference", data)
 
-    def test_diagnostics_endpoint(self):
-        resp = self.client.get("/api/v1/diagnostics")
-        self.assertEqual(resp.status_code, 200)
-        data = resp.json()
-        self.assertIn("overall_status", data)
-        self.assertIn("checks", data)
-
     def test_recommendation_engine(self):
         resp = self.client.post("/api/v1/config/recommend", json={"context_length": 2048})
         self.assertEqual(resp.status_code, 200)
@@ -140,44 +133,6 @@ class TestProject2Engine(unittest.TestCase):
         resp_del_dir = self.client.request("DELETE", "/api/v1/models/directories", json={"directory_path": "non_existent_folder_xyz"})
         self.assertEqual(resp_del_dir.status_code, 200)
 
-    def test_benchmarks_endpoints(self):
-        # 1. GET /api/v1/benchmarks
-        resp = self.client.get("/api/v1/benchmarks")
-        self.assertEqual(resp.status_code, 200)
-        data = resp.json()
-        self.assertIn("historical", data)
-        self.assertIn("measured", data)
-        self.assertIn("test_matrix", data["historical"])
-        self.assertGreater(len(data["historical"]["test_matrix"]), 0)
-
-        # 2. POST /api/v1/benchmarks
-        bench_req = {
-            "prompt": "Test benchmark execution prompt",
-            "max_tokens": 8,
-            "context_length": 2048,
-            "threads": 2,
-            "gpu_layers": 0
-        }
-        post_resp = self.client.post("/api/v1/benchmarks", json=bench_req)
-        self.assertEqual(post_resp.status_code, 200)
-        record = post_resp.json()
-        self.assertIn("id", record)
-        self.assertIn("eval_tps", record)
-        self.assertIn("ttft_ms", record)
-        self.assertIn("peak_ram_mb", record)
-
-        bench_id = record["id"]
-
-        # 3. GET /api/v1/benchmarks/{id}
-        get_resp = self.client.get(f"/api/v1/benchmarks/{bench_id}")
-        self.assertEqual(get_resp.status_code, 200)
-        self.assertEqual(get_resp.json()["id"], bench_id)
-
-        # 4. DELETE /api/v1/benchmarks/{id}
-        del_resp = self.client.delete(f"/api/v1/benchmarks/{bench_id}")
-        self.assertEqual(del_resp.status_code, 200)
-        self.assertEqual(del_resp.json()["status"], "deleted")
-
     def test_evaluations_endpoints(self):
         # 1. GET /api/v1/evaluations
         resp = self.client.get("/api/v1/evaluations")
@@ -231,15 +186,8 @@ class TestProject2Engine(unittest.TestCase):
         invalid_resp = self.client.get("/api/v1/runtimes/nonexistent_runtime_xyz/status")
         self.assertEqual(invalid_resp.status_code, 404)
 
-    def test_config_validation_and_model_download(self):
-        # 1. POST /api/v1/config/validate
-        val_resp = self.client.post("/api/v1/config/validate", json={"threads": 4, "context_size": 2048})
-        self.assertEqual(val_resp.status_code, 200)
-        val_data = val_resp.json()
-        self.assertIn("valid", val_data)
-        self.assertIn("estimated_ram_mb", val_data)
-
-        # 2. POST /api/v1/models/download without license confirmation
+    def test_model_download(self):
+        # 1. POST /api/v1/models/download without license confirmation
         down_req = {
             "source_url": "https://huggingface.co/test/model.gguf",
             "destination_filename": "test_model.gguf",

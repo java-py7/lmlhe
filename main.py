@@ -24,7 +24,6 @@ from fastapi.staticfiles import StaticFiles
 from engine import (
     BASE_DIR,
     STORAGE_DIR,
-    BENCHMARKS_FILE,
     CONFIG_FILE,
     MODELS_FILE,
     EVALUATIONS_FILE,
@@ -50,15 +49,12 @@ from engine import (
     DirectoryRequest,
     AddModelRequest,
     RecommendationRequest,
-    BenchmarkRunRequest,
     QualityEvaluationRequest,
     QualityRatingRequest,
-    ConfigValidateRequest,
     ModelDownloadRequest,
     GenerateRequest,
     OpenAIChatRequest,
     HumanFeedbackRequest,
-    ValidateConfigRequest,
     DownloadModelRequest,
     AdvisorRecommendationRequest,
     AdvisorSetupRequest,
@@ -101,16 +97,11 @@ from engine import (
     AIModelAdvisorEngine,
     ModelSetupManager,
     setup_manager,
-    load_benchmarks,
-    save_benchmarks,
     load_evaluations,
     save_evaluations,
     STANDARD_QUALITY_TASKS,
     evaluate_task_response,
-    read_historical_benchmarks,
-    run_diagnostics_suite,
     run_single_inference,
-    execute_benchmark_run,
     execute_quality_evaluation,
     is_hosted_environment,
     get_deployment_info,
@@ -869,37 +860,6 @@ def recommend_config(req: RecommendationRequest):
     return RecommendationEngine.recommend(target_model, context_len=ctx)
 
 
-@app.post("/api/v1/config/validate", dependencies=[Depends(verify_sensitive_access)])
-def validate_engine_config(req: ConfigValidateRequest):
-    cfg = load_config()
-    model_id = req.model_id or cfg.active_model_id
-    models = {m.id: m for m in load_models_catalog()}
-    target_model = models.get(model_id)
-    ctx = req.context_size or 2048
-
-    rec = RecommendationEngine.recommend(target_model, context_len=ctx)
-    safety_tier = rec["safety"]["tier"]
-    is_valid = safety_tier != "EXCEEDS_MEMORY"
-    warnings = []
-    if safety_tier == "EXCEEDS_MEMORY":
-        warnings.append(rec["safety"]["message"])
-    elif safety_tier == "TIGHT":
-        warnings.append("High memory utilization expected. Consider reducing context size or closing background apps.")
-
-    threads = req.threads or rec["recommendations"]["threads"]
-    hw = HardwareDetector.get_full_hardware_profile()
-    if threads > hw["cpu"]["logical_threads"]:
-        warnings.append(f"Requested threads ({threads}) exceeds system logical threads ({hw['cpu']['logical_threads']}).")
-
-    return {
-        "valid": is_valid,
-        "safety_tier": safety_tier,
-        "warnings": warnings,
-        "estimated_ram_mb": round(rec["memory_breakdown"]["total_required_bytes"] / (1024 ** 2), 1),
-        "recommendation": rec,
-    }
-
-
 @app.get("/api/v1/metrics", dependencies=[Depends(verify_public_access)])
 @app.get("/api/v1/metrics/live", dependencies=[Depends(verify_public_access)])
 def get_live_metrics():
@@ -928,16 +888,6 @@ def get_live_metrics():
             "ollama": OllamaManager.get_status(),
         },
     }
-
-
-@app.get("/api/v1/diagnostics", dependencies=[Depends(verify_public_access)])
-def get_diagnostics():
-    return run_diagnostics_suite()
-
-
-@app.get("/api/v1/benchmark/summary", dependencies=[Depends(verify_public_access)])
-def get_benchmarks():
-    return read_historical_benchmarks()
 
 
 @app.get("/api/v1/logs/llama", dependencies=[Depends(verify_sensitive_access)])
@@ -1426,38 +1376,6 @@ async def chat_completions(req: ChatCompletionRequest):
             except Exception as e:
                 telemetry.finish_generation(error=str(e))
                 raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/api/v1/benchmarks", dependencies=[Depends(verify_public_access)])
-def get_all_benchmarks():
-    return {
-        "historical": read_historical_benchmarks(),
-        "measured": load_benchmarks(),
-    }
-
-
-@app.post("/api/v1/benchmarks", dependencies=[Depends(verify_sensitive_access)])
-async def run_benchmark_endpoint(req: BenchmarkRunRequest):
-    return await execute_benchmark_run(req)
-
-
-@app.get("/api/v1/benchmarks/{benchmark_id}", dependencies=[Depends(verify_public_access)])
-def get_single_benchmark(benchmark_id: str):
-    benches = load_benchmarks()
-    for b in benches:
-        if b.get("id") == benchmark_id:
-            return b
-    raise HTTPException(status_code=404, detail="Benchmark record not found")
-
-
-@app.delete("/api/v1/benchmarks/{benchmark_id}", dependencies=[Depends(verify_sensitive_access)])
-def delete_single_benchmark(benchmark_id: str):
-    benches = load_benchmarks()
-    filtered = [b for b in benches if b.get("id") != benchmark_id]
-    if len(filtered) == len(benches):
-        raise HTTPException(status_code=404, detail="Benchmark record not found")
-    save_benchmarks(filtered)
-    return {"status": "deleted", "id": benchmark_id}
 
 
 @app.get("/api/v1/evaluations", dependencies=[Depends(verify_public_access)])

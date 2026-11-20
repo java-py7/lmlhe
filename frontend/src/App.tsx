@@ -11,10 +11,6 @@ import { HardwarePage } from '@/pages/HardwarePage';
 import { RuntimesPage } from '@/pages/RuntimesPage';
 import { InferencePage } from '@/pages/InferencePage';
 import { MonitorPage } from '@/pages/MonitorPage';
-import { BenchmarksPage } from '@/pages/BenchmarksPage';
-import { DiagnosticsPage } from '@/pages/DiagnosticsPage';
-import { ApiConfigPage } from '@/pages/ApiConfigPage';
-import { DeploymentPage } from '@/pages/DeploymentPage';
 
 export function App() {
   return (
@@ -30,10 +26,6 @@ export function App() {
                 <Route path="/runtimes" element={<RuntimesPage />} />
                 <Route path="/inference" element={<InferencePage />} />
                 <Route path="/monitor" element={<MonitorPage />} />
-                <Route path="/benchmarks" element={<BenchmarksPage />} />
-                <Route path="/diagnostics" element={<DiagnosticsPage />} />
-                <Route path="/api-config" element={<ApiConfigPage />} />
-                <Route path="/deployment" element={<DeploymentPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </AppLayout>

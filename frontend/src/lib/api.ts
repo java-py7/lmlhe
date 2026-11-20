@@ -3,12 +3,10 @@ import {
   EngineConfig,
   RuntimeStatusResponse,
   LiveMetrics,
-  DiagnosticsSuite,
   ModelEntry,
   AdvisorHardwareSummary,
   AdvisorRecommendationItem,
   SetupProgress,
-  BenchmarkRecord,
 } from './types';
 
 function getApiBase(): string {
@@ -95,11 +93,6 @@ export const api = {
     request<any>('/api/v1/config/recommend', {
       method: 'POST',
       body: JSON.stringify({ model_id: modelId, context_length: contextLength }),
-    }),
-  validateConfig: (req: any) =>
-    request<any>('/api/v1/config/validate', {
-      method: 'POST',
-      body: JSON.stringify(req),
     }),
 
   // Runtimes
@@ -188,24 +181,8 @@ export const api = {
 
   // Telemetry & Metrics
   getMetrics: () => request<LiveMetrics>('/api/v1/metrics'),
-
-  // Diagnostics
-  getDiagnostics: () => request<DiagnosticsSuite>('/api/v1/diagnostics'),
   getLogs: (source: 'llama' | 'app', lines: number = 100) =>
     request<{ logs: string }>(`/api/v1/logs/${source}?lines=${lines}`),
-
-  // Benchmarks
-  getBenchmarks: () =>
-    request<{ historical: any; custom: BenchmarkRecord[] }>('/api/v1/benchmarks'),
-  runBenchmark: (req: any) =>
-    request<any>('/api/v1/benchmarks', {
-      method: 'POST',
-      body: JSON.stringify(req),
-    }),
-  deleteBenchmark: (id: string) =>
-    request<any>(`/api/v1/benchmarks/${encodeURIComponent(id)}`, {
-      method: 'DELETE',
-    }),
 
   // Evaluations
   getEvaluations: () => request<{ evaluations: any[] }>('/api/v1/evaluations'),

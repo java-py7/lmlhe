@@ -211,38 +211,6 @@ export interface LiveMetrics {
   };
 }
 
-export interface BenchmarkRecord {
-  id: string;
-  timestamp: string;
-  model_name: string;
-  runtime: string;
-  context_length: number;
-  threads: number;
-  gpu_layers: number;
-  tokens_per_second: number;
-  prompt_eval_tokens_per_second?: number;
-  time_to_first_token_sec?: number;
-  total_duration_sec: number;
-  tokens_generated: number;
-  memory_rss_bytes?: number;
-  memory_rss_formatted?: string;
-  notes?: string;
-}
-
-export interface DiagnosticItem {
-  id: string;
-  name: string;
-  status: 'passed' | 'warning' | 'failed';
-  message: string;
-  remediation?: string;
-}
-
-export interface DiagnosticsSuite {
-  timestamp: string;
-  overall_status: 'healthy' | 'warning' | 'degraded';
-  checks: DiagnosticItem[];
-}
-
 export interface AdvisorRecommendationItem {
   id: string;
   model_id?: string;

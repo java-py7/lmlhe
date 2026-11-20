@@ -7,10 +7,6 @@ import {
   Layers,
   MessageSquare,
   Activity,
-  BarChart3,
-  ShieldAlert,
-  Settings,
-  Package,
   Sun,
   Moon,
   ChevronLeft,
@@ -34,10 +30,6 @@ const navItems = [
   { name: 'Runtimes & Models', path: '/runtimes', icon: Layers },
   { name: 'Inference Studio', path: '/inference', icon: MessageSquare },
   { name: 'Live Monitor', path: '/monitor', icon: Activity },
-  { name: 'Benchmark Matrix', path: '/benchmarks', icon: BarChart3 },
-  { name: 'Diagnostics', path: '/diagnostics', icon: ShieldAlert },
-  { name: 'Project 3 API & Config', path: '/api-config', icon: Settings },
-  { name: 'Deployment & Packaging', path: '/deployment', icon: Package },
 ];
 
 export function AppLayout({ children }: { children?: React.ReactNode } = {}) {
