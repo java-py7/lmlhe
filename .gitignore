@@ -1,17 +1,8 @@
-__pycache__/
-*.py[cod]
-*$py.class
-.venv/
-venv/
-env/
-*.log
-storage/*.log
-storage/logs/
-.DS_Store
-
-# Node / React
 node_modules/
-frontend/node_modules/
-frontend/dist/
+build/
 dist/
-.vite/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example

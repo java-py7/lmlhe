@@ -1,0 +1,6 @@
+{
+  "name": "LocalScale",
+  "description": "Local hardware detection, constrained-hardware LLM runtime abstraction layer, benchmarking, and performance telemetry console.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
